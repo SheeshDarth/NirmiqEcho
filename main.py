@@ -44,6 +44,7 @@ class NirmiqEchoApp:
         self.ui = None
         self._hotkeys = HotkeyManager()
         self._listening = False
+        self._autorun = False  # set by SettingsModal
 
     # ------------------------------------------------------------------
     # Startup
@@ -56,6 +57,7 @@ class NirmiqEchoApp:
             sensitivity=2,
             on_status_change=self._on_audio_status,
         )
+
 
         self.transcription_engine = TranscriptionEngine(
             speech_queue=self.audio_handler.speech_queue,
@@ -71,6 +73,7 @@ class NirmiqEchoApp:
         self._hotkeys.register(TOGGLE_KEY, self._toggle)
 
         # Load model in background so the UI appears immediately
+        # After model loads, auto-start if SettingsModal enabled it
         threading.Thread(
             target=self._load_model,
             name="ModelLoader",
@@ -89,6 +92,8 @@ class NirmiqEchoApp:
             self.ui.schedule("set_model_info", self.transcription_engine.model_info)
             self.ui.schedule("set_status", "ready")
             logger.info("Model ready: %s", self.transcription_engine.model_info)
+            if self._autorun:
+                self.start_listening()
         except Exception as exc:
             logger.error("Model loading failed: %s", exc, exc_info=True)
             self.ui.schedule("set_status", "error")

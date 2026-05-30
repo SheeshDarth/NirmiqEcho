@@ -10,6 +10,10 @@ pyautogui>=0.9.54
 keyboard>=0.13.5
 pyperclip>=1.8.2
 
+# System tray (optional — graceful fallback if not installed)
+pystray>=0.19.0
+Pillow>=9.0.0
+
 # Optional GPU acceleration — NVIDIA CUDA only
 # Uncomment the line below for 3-5x faster transcription:
 # pip install torch --index-url https://download.pytorch.org/whl/cu121
