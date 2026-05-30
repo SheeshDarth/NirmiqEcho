@@ -1,0 +1,15 @@
+# NirmiqEcho - Python Dependencies
+# Install: pip install -r requirements.txt
+
+sounddevice>=0.4.6
+numpy>=1.20
+scipy>=1.7
+webrtcvad-wheels        # pre-compiled VAD for Windows (Python 3.12+)
+faster-whisper>=0.10.0
+pyautogui>=0.9.54
+keyboard>=0.13.5
+pyperclip>=1.8.2
+
+# Optional GPU acceleration — NVIDIA CUDA only
+# Uncomment the line below for 3-5x faster transcription:
+# pip install torch --index-url https://download.pytorch.org/whl/cu121
