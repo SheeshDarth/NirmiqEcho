@@ -164,12 +164,12 @@ class MicButton(tk.Canvas):
         self._pulse_scale = 1.0
         self._pulse_dir = 1
         self._pulse_job = None
+        self._hover = False       # must be set before _draw() is called
 
         self._draw()
         self.bind("<ButtonRelease-1>", lambda e: self._on_click())
         self.bind("<Enter>", self._hover_on)
         self.bind("<Leave>", self._hover_off)
-        self._hover = False
 
     def _draw(self):
         self.delete("all")
