@@ -153,13 +153,14 @@ class MicButton(tk.Canvas):
         self._on_click    = on_click
         self._active      = False
         self._hover       = False   # MUST be set before first _draw()
+        self._enabled     = True    # False while model is loading
         self._pulse_scale = 1.0
         self._pulse_dir   = 1
         self._pulse_job   = None
         self._destroyed   = False
 
         self._draw()
-        self.bind("<ButtonRelease-1>", lambda e: self._on_click())
+        self.bind("<ButtonRelease-1>", lambda e: self._on_click() if self._enabled else None)
         self.bind("<Enter>",           self._hover_on)
         self.bind("<Leave>",           self._hover_off)
         self.bind("<Destroy>",         self._on_destroy)
@@ -177,8 +178,28 @@ class MicButton(tk.Canvas):
             self.delete("all")
             cx = cy = self.SIZE // 2
             r = 22
-            if self._active:
+
+            if not self._enabled:
+                # Greyed-out loading state — dim ring + muted mic
+                self.configure(cursor="arrow")
+                self.create_oval(cx-r, cy-r, cx+r, cy+r,
+                                 fill="", outline=C["dim"], width=2)
+                mw, mh = 8, 13
+                self.create_rectangle(cx-mw//2, cy-mh//2,
+                                      cx+mw//2, cy+mh//2,
+                                      fill=C["dim"], outline="")
+                self.create_arc(cx-mw//2-1, cy-mh//2-1,
+                                cx+mw//2+1, cy+mh//2+6,
+                                start=0, extent=180,
+                                fill=C["dim"], outline="")
+                self.create_line(cx, cy+mh//2, cx, cy+mh//2+5,
+                                 fill=C["dim"], width=2)
+                self.create_arc(cx-6, cy+mh//2-2, cx+6, cy+mh//2+8,
+                                start=180, extent=180,
+                                outline=C["dim"], width=2, style="arc")
+            elif self._active:
                 # Red fill + stop square
+                self.configure(cursor="hand2")
                 self.create_oval(cx-r, cy-r, cx+r, cy+r,
                                  fill=C["red"], outline="")
                 sq = 10
@@ -186,20 +207,18 @@ class MicButton(tk.Canvas):
                                       fill=C["text"], outline="")
             else:
                 # Teal ring + mic glyph
+                self.configure(cursor="hand2")
                 self.create_oval(cx-r, cy-r, cx+r, cy+r,
                                  fill="#0A8F9A" if self._hover else "",
                                  outline=C["teal"], width=2)
                 mw, mh = 8, 13
-                # Mic body rect
                 self.create_rectangle(cx-mw//2, cy-mh//2,
                                       cx+mw//2, cy+mh//2,
                                       fill=C["teal"], outline="")
-                # Mic dome arc
                 self.create_arc(cx-mw//2-1, cy-mh//2-1,
                                 cx+mw//2+1, cy+mh//2+6,
                                 start=0, extent=180,
                                 fill=C["teal"], outline="")
-                # Stand
                 self.create_line(cx, cy+mh//2, cx, cy+mh//2+5,
                                  fill=C["teal"], width=2)
                 self.create_arc(cx-6, cy+mh//2-2, cx+6, cy+mh//2+8,
@@ -217,6 +236,13 @@ class MicButton(tk.Canvas):
         self._draw()
 
     # ── Public ────────────────────────────────────────────────────────
+
+    def set_enabled(self, val: bool):
+        """Disable (grey out) the button while model is loading."""
+        self._enabled = val
+        if not val:
+            self._hover = False
+        self._draw()
 
     def set_active(self, val: bool):
         self._active = val
@@ -845,6 +871,12 @@ class NirmiqEchoUI:
         label, color = STATUS_MAP.get(key, STATUS_MAP["idle"])
         self._status_var.set(label)
         self._status_lbl.config(fg=color)
+        # Disable mic button while model is loading
+        try:
+            self._mic_btn.set_enabled(key != "loading")
+        except Exception:
+            pass
+
 
     def _do_append_transcript(self, text: str):
         self._lines.append(text)

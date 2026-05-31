@@ -111,7 +111,8 @@ class NirmiqEchoApp:
         if self._listening:
             return
         if not self.transcription_engine.is_ready:
-            self.ui.schedule("show_error", "Please wait — the model is still loading.")
+            # Model still loading — status bar already shows "Loading model…"
+            # Silently ignore; mic button is visually disabled during this period
             return
         try:
             self.audio_handler.start()
