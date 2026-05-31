@@ -93,15 +93,27 @@ class TranscriptionEngine:
         start = time.monotonic()
 
         with self._model_lock:
-            self._model = WhisperModel(
-                self.model_size,
-                device=self.device,
-                compute_type=self.compute_type,
-            )
+            # Try local cache first for near-instant load; fall back to download
+            try:
+                self._model = WhisperModel(
+                    self.model_size,
+                    device=self.device,
+                    compute_type=self.compute_type,
+                    local_files_only=True,
+                )
+                logger.info("Loaded from local cache")
+            except Exception:
+                logger.info("Cache miss — downloading model '%s'", self.model_size)
+                self._model = WhisperModel(
+                    self.model_size,
+                    device=self.device,
+                    compute_type=self.compute_type,
+                )
 
         elapsed = time.monotonic() - start
         logger.info("Model loaded in %.1f s", elapsed)
         self.on_status_change("ready")
+
 
     def start(self) -> None:
         """Start the transcription worker thread."""
