@@ -226,20 +226,21 @@ class TranscriptionEngine:
                     language=self.language,
                     beam_size=8,                        # ↑ from 5 → better accuracy
                     best_of=5,                          # multiple decoding runs
-                    initial_prompt=self.initial_prompt, # accent / context primer
+                    initial_prompt=self.initial_prompt, # accent + hotwords primer
                     vad_filter=True,
                     vad_parameters={
-                        "min_silence_duration_ms": 250,
-                        "speech_pad_ms": 100,
-                        "threshold": 0.35,              # more sensitive VAD
+                        "min_silence_duration_ms": 300,
+                        "speech_pad_ms": 80,
+                        "threshold": 0.45,              # higher = ignore background music
                     },
                     word_timestamps=False,
                     condition_on_previous_text=False,   # each segment independent
-                    temperature=0.0,                    # greedy, consistent
-                    no_speech_threshold=0.4,            # ↓ catches quiet speech
-                    log_prob_threshold=-1.0,
+                    suppress_blank=True,                # skip blank/silence outputs
+                    temperature=0.0,                    # greedy, most consistent
+                    no_speech_threshold=0.5,            # drop low-confidence silence
+                    log_prob_threshold=-0.8,            # reject gibberish outputs
                     compression_ratio_threshold=2.4,
-                    hallucination_silence_threshold=2.0, # reject silence-only output
+                    hallucination_silence_threshold=2.0,
                 )
 
             text_parts = [seg.text for seg in segments]
