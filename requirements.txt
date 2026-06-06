@@ -9,6 +9,7 @@ faster-whisper>=0.10.0
 pyautogui>=0.9.54
 keyboard>=0.13.5
 pyperclip>=1.8.2
+psutil>=5.9.0           # RAM detection for auto model selection (large-v3 vs medium)
 
 # System tray (optional — graceful fallback if not installed)
 pystray>=0.19.0

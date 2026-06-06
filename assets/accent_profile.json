@@ -1,0 +1,20 @@
+{
+  "language": "en",
+  "language_probability": 0.926,
+  "accent_hint": "Indian English - Bangalore",
+  "initial_prompt": "This is a transcription of Siddharth speaking in Indian English. Siddharth is a third-year AI ML student at BNMIT Bangalore. He is building an income system using free AI tools before the recession hits. His goal is to go from zero to one lakh rupees a month. This is his real journey with real numbers and real mistakes. Transcribe accurately. Common terms: BNMIT, Bangalore, AI, ML, income system, lakh, rupees, recession, free AI tools.",
+  "sample_texts": [
+    "Hi, I'm Siddharth. I'm a third year AI ML student at BNMIT, Bangalore. I'm building an income system using free AI tools before the recession hits. My goal is to go from zero to one lakh rupees a month. This is my real journey, my real numbers and my real mistakes.",
+    "Hi, I'm Siddharth. I'm a third-year AML student at BNMIT Bangalore. I'm building an income system using free AI tools before the recession hits. My goal is to go from zero to one lakh rupees a month. This is my real journey, my real numbers and my real honest mistakes."
+  ],
+  "corrections": {
+    "PNMIT": "BNMIT",
+    "BNMighty": "BNMIT",
+    "AML": "AI ML",
+    "one hundred thousand rupees": "one lakh rupees"
+  },
+  "analyzed_at": "2026-06-06T14:21:09",
+  "model_used": "medium",
+  "hand_tuned": true,
+  "version": 3
+}

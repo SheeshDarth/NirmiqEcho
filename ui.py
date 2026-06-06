@@ -1,15 +1,17 @@
 """
-ui.py - NirmiqEcho Phase 2 UI
+ui.py - NirmiqEcho Phase 3 UI
 
 Full production UI per Nirmiq Echo Design Summary spec:
 - Custom dark draggable titlebar (#31354B) with settings/pin/minimize/close
 - 48px circular Start/Stop MicButton (teal → red + pulse animation)
 - 7-bar vertical VU meter with smooth per-bar decay
-- Settings modal (sensitivity, language, hotkey, auto-run)
+- Settings modal (sensitivity, language, hotkey, auto-run, mode selector)
+- Echo Mode toggle: say 'Hello Echo' to activate from standby
 - System tray minimize via pystray (graceful fallback)
-- Full keyboard shortcuts (F9, Ctrl+C/S/L, Esc, Ctrl+Q)
+- Full keyboard shortcuts (F9, Ctrl+C/S/L, Esc, Ctrl+Q, Ctrl+E)
 - Tooltips (500ms) on all interactive elements
 - WCAG AA color palette throughout
+- Phase 3: standby / wake_detected status states, mode selector
 """
 
 import tkinter as tk
@@ -50,6 +52,8 @@ C = {
     "red":      "#F44336",   # stop / error
     "green":    "#4CAF50",   # ready / speaking
     "orange":   "#FF9800",   # loading / transcribing
+    "amber":    "#FFC107",   # standby / echo mode waiting
+    "purple":   "#9C27B0",   # wake word detected
     "focus":    "#5DC3F6",   # keyboard focus ring
 
     "sb_track": "#3F4140",
@@ -68,13 +72,15 @@ F = {
 
 # State key → (display label, colour)
 STATUS_MAP = {
-    "idle":             ("Idle — click ▶ or press F9 to start", C["text2"]),
-    "loading":          ("Loading model…",                       C["orange"]),
-    "ready":            ("Ready",                                C["green"]),
-    "listening":        ("Listening…",                           C["teal"]),
-    "listening_active": ("Speaking…",                            C["green"]),
-    "transcribing":     ("Transcribing…",                        C["orange"]),
-    "error":            ("Error — see console for details",      C["red"]),
+    "idle":             ("Idle — click ▶ or press F9 to start",   C["text2"]),
+    "loading":          ("Loading model…",                         C["orange"]),
+    "ready":            ("Ready",                                  C["green"]),
+    "listening":        ("Listening…",                             C["teal"]),
+    "listening_active": ("Speaking…",                              C["green"]),
+    "transcribing":     ("Transcribing…",                          C["orange"]),
+    "error":            ("Error — see console for details",        C["red"]),
+    "standby":          ("Say 'Hello Echo' to activate…",          C["amber"]),
+    "wake_detected":    ("Wake word detected! Listening…",         C["purple"]),
 }
 
 
@@ -272,9 +278,11 @@ class MicButton(tk.Canvas):
             self.delete("all")
             cx = cy = self.SIZE // 2
             r = int(22 * self._pulse_scale)
+            # Active state pulses red (not teal)
+            ring_fill = C["red"] if self._pulse_scale > 1.05 else ""
             self.create_oval(cx-r, cy-r, cx+r, cy+r,
-                             fill=C["teal"] if self._pulse_scale > 1.05 else "",
-                             outline=C["teal"], width=2)
+                             fill=ring_fill,
+                             outline=C["red"], width=2)
             sq = 10
             self.create_rectangle(cx-sq, cy-sq, cx+sq, cy+sq,
                                   fill=C["text"], outline="")
@@ -520,9 +528,28 @@ class SettingsModal:
 
         # ── Hotkey ────────────────────────────────────────────────────
         self._lbl(body, "Global Toggle Hotkey")
-        tk.Label(body, text="F9  (fixed in this release)",
+        tk.Label(body, text="F9  (fixed) · Ctrl+E  (Echo Mode toggle)",
                  font=F["small"], bg=C["modal_bg"],
                  fg=C["text2"]).pack(anchor="w")
+        self._sep(body)
+
+        # ── Typing Mode ───────────────────────────────────────────────
+        self._lbl(body, "Typing Mode")
+        mode_row = tk.Frame(body, bg=C["modal_bg"])
+        mode_row.pack(fill="x", pady=2)
+        self._mode_var = tk.StringVar(value="default")
+        for val, lbl, tip in [
+            ("default", "Default",  "Balanced — capitalize + punctuate"),
+            ("message", "Message",  "Inline text, minimal punctuation"),
+            ("note",    "Note",     "Full sentences with periods"),
+            ("search",  "Search",   "Raw text, no auto-caps"),
+        ]:
+            tk.Radiobutton(
+                mode_row, text=lbl, variable=self._mode_var, value=val,
+                font=F["small"], bg=C["modal_bg"], fg=C["text2"],
+                activebackground=C["modal_bg"], activeforeground=C["teal"],
+                selectcolor=C["panel"], relief="flat",
+            ).pack(side="left", padx=(0, 8))
         self._sep(body)
 
         # ── Auto-run ──────────────────────────────────────────────────
@@ -537,10 +564,38 @@ class SettingsModal:
                        ).pack(anchor="w", pady=4)
         self._sep(body)
 
-        # ── About ─────────────────────────────────────────────────────
+        # ── About / Voice Profile ─────────────────────────────────────
         tk.Label(body, text="NirmiqEcho  ·  100% offline  ·  Whisper AI",
                  font=F["badge"], bg=C["modal_bg"], fg=C["text2"]
                  ).pack(anchor="w", pady=(0, 2))
+
+        def _reanalyse():
+            """Re-run accent analysis with force=True."""
+            self._win.destroy()
+            import threading
+            from pathlib import Path
+            import glob
+            sample_dir = "C:/Users/Siddharth/Desktop/Voice-text"
+            files = sorted(glob.glob(f"{sample_dir}/Test *.m4a") +
+                           glob.glob(f"{sample_dir}/Test*.m4a"))
+            if not files:
+                from tkinter import messagebox as mb
+                mb.showwarning("NirmiqEcho",
+                               "No voice sample files found.\n"
+                               "Place Test 1 voice.m4a etc. in the Voice-text folder.")
+                return
+            if hasattr(self._app, "accent_profiler") and self._app.accent_profiler:
+                threading.Thread(
+                    target=lambda: self._app.accent_profiler.analyze(files, force=True),
+                    daemon=True,
+                ).start()
+
+        tk.Button(body, text="🎙  Re-analyse Voice Samples", command=_reanalyse,
+                  font=F["small"], bg=C["panel"], fg=C["teal"],
+                  activebackground=C["panel2"], activeforeground=C["text"],
+                  relief="flat", padx=8, pady=3, cursor="hand2",
+                  ).pack(anchor="w", pady=(4, 0))
+        self._sep(body)
 
         # ── Buttons ───────────────────────────────────────────────────
         btn_row = tk.Frame(body, bg=C["modal_bg"])
@@ -552,6 +607,8 @@ class SettingsModal:
                 lang = self._lang_var.get().strip() or None
                 self._app.transcription_engine.language = lang
             self._app._autorun = self._autorun_var.get()
+            if hasattr(self._app, "set_mode"):
+                self._app.set_mode(self._mode_var.get())
             self._win.destroy()
 
         for txt, cmd, fg in [("Save", _save, C["teal"]),
@@ -561,6 +618,8 @@ class SettingsModal:
                       activebackground=C["panel2"], activeforeground=C["text"],
                       relief="flat", padx=16, pady=4, cursor="hand2"
                       ).pack(side="left", padx=(0, 8))
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -597,6 +656,7 @@ class NirmiqEchoUI:
         self._listening = False
         self._tray      = None
         self._cur_status_key = "idle"   # track current status key
+        self._iconified = False          # guard for overrideredirect restore
 
         self._build()
         self._bind_shortcuts()
@@ -725,7 +785,34 @@ class NirmiqEchoUI:
         ]:
             IconBtn(bar, icon, lbl, cmd, tip=tip).pack(side="left", padx=6)
 
-        # VU meter
+        # ── Echo Mode toggle (right side) ─────────────────────────────
+        echo_col = tk.Frame(bar, bg=C["panel"])
+        echo_col.pack(side="right", padx=10)
+
+        self._echo_var = tk.BooleanVar(value=False)
+        self._echo_indicator = tk.Label(
+            echo_col, text="●", font=("Segoe UI", 10),
+            bg=C["panel"], fg=C["dim"])
+        self._echo_indicator.pack(side="top")
+
+        self._echo_btn = tk.Checkbutton(
+            echo_col,
+            text="Echo",
+            variable=self._echo_var,
+            command=self._toggle_echo_mode,
+            font=F["badge"],
+            bg=C["panel"], fg=C["text2"],
+            activebackground=C["panel"], activeforeground=C["amber"],
+            selectcolor=C["panel"], relief="flat", cursor="hand2", bd=0,
+            indicatoron=False,
+            padx=6, pady=2,
+        )
+        self._echo_btn.pack(side="top")
+        Tooltip(self._echo_btn,
+                "Echo Mode: say 'Hello Echo' to activate  (Ctrl+E)")
+
+        # ── VU meter ─────────────────────────────────────────────────
+        tk.Frame(bar, bg=C["panel2"], width=1).pack(side="right", fill="y", padx=4)
         vu_col = tk.Frame(bar, bg=C["panel"])
         vu_col.pack(side="right", padx=14)
         tk.Label(vu_col, text="MIC", font=F["badge"],
@@ -828,6 +915,7 @@ class NirmiqEchoUI:
         r.bind("<Control-s>", lambda e: self._save())
         r.bind("<Control-l>", lambda e: self._clear())
         r.bind("<Control-q>", lambda e: self._on_close())
+        r.bind("<Control-e>", lambda e: self._toggle_echo_mode())
 
     # ─────────────────────────── tick loop ───────────────────────────
 
@@ -876,7 +964,54 @@ class NirmiqEchoUI:
             self._mic_btn.set_enabled(key != "loading")
         except Exception:
             pass
+        # Update echo indicator dot colour
+        try:
+            if key == "standby":
+                self._echo_indicator.config(fg=C["amber"])
+            elif key == "wake_detected":
+                self._echo_indicator.config(fg=C["purple"])
+            elif key in ("listening", "listening_active"):
+                self._echo_indicator.config(fg=C["teal"])
+            elif key == "transcribing":
+                self._echo_indicator.config(fg=C["orange"])
+            else:
+                echo_on = self._echo_var.get()
+                self._echo_indicator.config(fg=C["amber"] if echo_on else C["dim"])
+        except Exception:
+            pass
 
+    def _do_set_echo_mode(self, enabled: bool):
+        """Sync Echo Mode toggle visual state from backend."""
+        try:
+            self._echo_var.set(enabled)
+            self._echo_btn.config(
+                fg=C["amber"] if enabled else C["text2"],
+                bg=C["panel2"] if enabled else C["panel"],
+            )
+            self._echo_indicator.config(
+                fg=C["amber"] if enabled else C["dim"]
+            )
+        except Exception:
+            pass
+
+    def _do_set_status_text(self, text: str):
+        """Show arbitrary feedback text in the status bar (doesn't change state key)."""
+        try:
+            self._status_var.set(text)
+            self._status_lbl.config(fg=C["teal"])
+        except Exception:
+            pass
+
+    def _do_clear_transcript(self, _=None):
+        """Clear the transcript panel — called by 'clear transcript' voice command."""
+        try:
+            self._lines.clear()
+            self._txt.config(state="normal")
+            self._txt.delete("1.0", "end")
+            self._txt.config(state="disabled")
+            self._wc_lbl.config(text="0 words")
+        except Exception:
+            pass
 
     def _do_append_transcript(self, text: str):
         self._lines.append(text)
@@ -913,6 +1048,18 @@ class NirmiqEchoUI:
     def _stop_only(self):
         if self._listening:
             self.app.stop_listening()
+
+    def _toggle_echo_mode(self):
+        """Toggle Echo Mode on / off (Ctrl+E or Echo button)."""
+        # _echo_var already toggled by Checkbutton; read it
+        try:
+            enabled = self._echo_var.get()
+        except Exception:
+            enabled = False
+        if enabled:
+            self.app.enable_echo_mode()
+        else:
+            self.app.disable_echo_mode()
 
     def _copy(self):
         text = self._get_text()
@@ -973,12 +1120,16 @@ class NirmiqEchoUI:
             self._start_tray()
         else:
             # No tray: temporarily restore OS frame so iconify works
+            self._iconified = True
             self.root.overrideredirect(False)
             self.root.iconify()
-            # Re-apply custom titlebar when user restores
+            # Re-apply custom titlebar only after the user restores from taskbar
             self.root.bind("<Map>", self._on_map_after_iconify)
 
     def _on_map_after_iconify(self, _=None):
+        if not self._iconified:
+            return
+        self._iconified = False
         self.root.unbind("<Map>")
         self.root.overrideredirect(True)
 
