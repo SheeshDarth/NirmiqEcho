@@ -94,20 +94,39 @@ class WakeWordDetector:
     # ------------------------------------------------------------------
 
     def load_model(self) -> None:
-        """Load Whisper tiny — call once in a background thread."""
+        """Load Whisper tiny.en — call once in a background thread."""
         from faster_whisper import WhisperModel
+        import os
 
-        logger.info("WakeWordDetector: loading Whisper tiny model…")
+        logger.info("WakeWordDetector: loading Whisper tiny.en model…")
         start = time.monotonic()
+
+        cache_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "models"
+        )
+        os.makedirs(cache_dir, exist_ok=True)
+
         with self._model_lock:
-            self._model = WhisperModel(
-                "tiny",
-                device="cpu",
-                compute_type="int8",
-                local_files_only=False,
-            )
-        logger.info("WakeWordDetector: tiny model loaded in %.1fs",
+            try:
+                self._model = WhisperModel(
+                    "tiny.en",
+                    device="cpu",
+                    compute_type="int8",
+                    local_files_only=True,
+                    download_root=cache_dir,
+                )
+            except Exception:
+                # First run — download from HuggingFace
+                self._model = WhisperModel(
+                    "tiny.en",
+                    device="cpu",
+                    compute_type="int8",
+                    download_root=cache_dir,
+                )
+
+        logger.info("WakeWordDetector: tiny.en loaded in %.1fs",
                     time.monotonic() - start)
+
 
     def start(self) -> None:
         """Open mic stream and begin wake word detection loop."""

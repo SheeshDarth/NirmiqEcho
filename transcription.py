@@ -108,14 +108,16 @@ class TranscriptionEngine:
 
         self.device, self.compute_type = _detect_compute_device()
 
-        # Model selection: medium always on CPU (low memory, WhisperFlow-level speed)
-        # large-v3 only when CUDA GPU is available (same latency target, better accuracy)
+        # Model selection:
+        #   CPU → 'small'  : loads in ~4s, uses ~500MB RAM. Best for commands.
+        #   CPU → 'medium' : loads in ~25s, uses ~1.5GB RAM. Best for dictation.
+        #   GPU → 'large-v3': loads in ~3s on CUDA, highest accuracy.
         if model_size:
             self.model_size = model_size          # explicit override
         elif self.device == "cuda":
             self.model_size = "large-v3"          # GPU: use best model
         else:
-            self.model_size = "medium"            # CPU: medium is the sweet spot
+            self.model_size = "small"             # CPU: fast startup (<5s)
 
         logger.info(
             "TranscriptionEngine: model=%s  device=%s  compute=%s  language=%s",

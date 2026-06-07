@@ -701,10 +701,10 @@ class NirmiqEchoUI:
         self.root.configure(bg=C["bg"])
         self.root.resizable(True, True)
         self.root.minsize(self.MIN_W, self.MIN_H)
-        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        # WM_DELETE_WINDOW → hide to tray (model stays in RAM)
+        self.root.protocol("WM_DELETE_WINDOW", self._hide_to_tray)
         self.root.attributes("-topmost", True)
 
-        # Custom titlebar (overrideredirect removes OS decoration)
         self.root.overrideredirect(True)
         self._apply_dark_titlebar(self.root)
 
@@ -717,72 +717,79 @@ class NirmiqEchoUI:
         self._build_footer()
         self._build_resize_grip()
 
-        # Center & show
+        # Start tray icon BEFORE showing window so it's always present
+        self._start_tray()
+
+        # Position bottom-right corner, above taskbar
         self.root.update_idletasks()
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
-        x  = (sw - self.DEF_W) // 2
-        y  = (sh - self.DEF_H) // 2
+        x  = sw - self.DEF_W - 16
+        y  = sh - self.DEF_H - 56
         self.root.geometry(f"{self.DEF_W}x{self.DEF_H}+{x}+{y}")
         self.root.deiconify()
 
     def _start_tray(self):
-        """Start the system tray icon (pystray) in a daemon thread."""
+        """Start system tray icon. Safe for pystray 0.19.5 on Windows."""
         if not _HAS_TRAY:
+            logger.warning("pystray/Pillow not available — no tray icon")
             return
+        if self._tray is not None:
+            return  # already running
+
         try:
+            # All callbacks that touch Tk MUST use root.after() to stay on main thread
+            def _show(icon, item):
+                self.root.after(0, self._show_window)
+
             def _toggle_listen(icon, item):
-                """Toggle listening from tray right-click menu."""
                 if self._listening:
-                    self.app.stop_listening()
+                    self.root.after(0, self.app.stop_listening)
                 else:
-                    self.app.start_listening()
+                    self.root.after(0, self.app.start_listening)
 
             def _toggle_echo(icon, item):
-                """Toggle Echo Mode from tray."""
-                if getattr(self.app, '_echo_mode', False):
-                    self.app.disable_echo_mode()
+                if getattr(self.app, "_echo_mode", False):
+                    self.root.after(0, self.app.disable_echo_mode)
                 else:
-                    self.app.enable_echo_mode()
-
-            def _show(icon, item):
-                self._show_window()
+                    self.root.after(0, self.app.enable_echo_mode)
 
             def _quit(icon, item):
-                self._on_close()
+                # Stop tray first, then shut down on main thread
+                icon.stop()
+                self.root.after(0, self._on_close)
 
             menu = pystray.Menu(
-                pystray.MenuItem("NirmiqEcho", _show, default=True),
+                pystray.MenuItem("Show NirmiqEcho",  _show, default=True),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem(
-                    lambda item: "Stop Listening" if self._listening else "Start Listening",
+                    "Listening",
                     _toggle_listen,
+                    checked=lambda item: self._listening,
                 ),
                 pystray.MenuItem(
-                    lambda item: "Echo Mode: ON" if getattr(self.app, '_echo_mode', False)
-                                               else "Echo Mode: OFF",
+                    "Echo Mode (Hello Echo)",
                     _toggle_echo,
+                    checked=lambda item: getattr(self.app, "_echo_mode", False),
                 ),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Show Window", _show),
-                pystray.MenuItem("Quit NirmiqEcho", _quit),
+                pystray.MenuItem("Quit", _quit),
             )
 
             self._tray = pystray.Icon(
-                "NirmiqEcho",
-                _make_tray_icon("idle"),
-                "NirmiqEcho — Click to show",
-                menu,
+                name="NirmiqEcho",
+                icon=_make_tray_icon("idle"),
+                title="NirmiqEcho",
+                menu=menu,
             )
-            threading.Thread(
-                target=self._tray.run,
-                daemon=True,
-                name="TrayThread",
-            ).start()
-            logger.info("System tray started")
+            t = threading.Thread(target=self._tray.run, daemon=True, name="TrayThread")
+            t.start()
+            logger.info("System tray icon started")
+
         except Exception as exc:
-            logger.warning("Tray init failed: %s", exc)
+            logger.error("Tray failed to start: %s", exc, exc_info=True)
             self._tray = None
+
 
     def _update_tray_icon(self, state: str):
         """Update tray icon color to reflect current app state."""
@@ -1009,11 +1016,10 @@ class NirmiqEchoUI:
     def _build_footer(self):
         f = tk.Frame(self.root, bg=C["panel"], pady=5)
         f.pack(fill="x", side="bottom")
-        # Thin top border
         tk.Frame(f, bg=C["border"], height=1).pack(fill="x")
         row = tk.Frame(f, bg=C["panel"])
         row.pack(fill="x")
-        tk.Label(row, text="🔒 offline  ·  Whisper medium  ·  F9 to toggle",
+        tk.Label(row, text="🔒 offline  ·  small model  ·  F9 toggle",
                  font=F["badge"], bg=C["panel"], fg=C["dim"],
                  padx=14).pack(side="right")
         tk.Label(row, text="NirmiqEcho",
