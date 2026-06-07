@@ -135,10 +135,20 @@ class TranscriptionEngine:
     def load_model(self) -> None:
         """Load the faster-whisper model. Call in a background thread."""
         from faster_whisper import WhisperModel
+        import os
 
         logger.info("Loading faster-whisper '%s' on %s…",
                     self.model_size, self.device)
         start = time.monotonic()
+
+        # Point to a predictable local cache directory (avoids re-downloads)
+        cache_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "models"
+        )
+        os.makedirs(cache_dir, exist_ok=True)
+
+        # cpu_threads: use all physical cores for faster load + inference
+        cpu_threads = min(8, max(2, (os.cpu_count() or 4)))
 
         with self._model_lock:
             # Try local cache first (instant); fall back to download
@@ -148,18 +158,24 @@ class TranscriptionEngine:
                     device=self.device,
                     compute_type=self.compute_type,
                     local_files_only=True,
+                    download_root=cache_dir,
+                    cpu_threads=cpu_threads,
+                    num_workers=2,
                 )
-                logger.info("Loaded from local cache")
+                logger.info("Loaded from local cache in %.1f s", time.monotonic() - start)
             except Exception:
                 logger.info("Cache miss — downloading model '%s'", self.model_size)
                 self._model = WhisperModel(
                     self.model_size,
                     device=self.device,
                     compute_type=self.compute_type,
+                    download_root=cache_dir,
+                    cpu_threads=cpu_threads,
+                    num_workers=2,
                 )
 
         elapsed = time.monotonic() - start
-        logger.info("Model loaded in %.1f s", elapsed)
+        logger.info("Model ready in %.1f s", elapsed)
         self.on_status_change("ready")
 
     def start(self) -> None:

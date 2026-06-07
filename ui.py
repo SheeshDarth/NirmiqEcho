@@ -37,50 +37,54 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────
 
 C = {
-    "bg":       "#121212",   # main window bg
-    "panel":    "#242423",   # toolbar / footer
-    "panel2":   "#31354B",   # titlebar / header strips
-    "tx_bg":    "#1F1F1F",   # transcript area bg
-    "modal_bg": "#1A1A2E",   # settings modal bg
+    "bg":       "#0F0F17",   # main window bg — deep navy-black
+    "panel":    "#1A1A28",   # toolbar / footer
+    "panel2":   "#252538",   # titlebar / header strips
+    "panel3":   "#1E1E30",   # transcript area bg
+    "tx_bg":    "#13131F",   # transcript scroll area
+    "modal_bg": "#151522",   # settings modal bg
+    "border":   "#2E2E48",   # subtle borders
 
-    "text":     "#ECEFF8",   # primary text  (~13.5:1 on panel)
-    "text2":    "#9EA1AC",   # secondary text (~5.8:1)
-    "dim":      "#565556",   # disabled / muted
+    "text":     "#E8EAF6",   # primary text
+    "text2":    "#8B8FA8",   # secondary text
+    "dim":      "#454560",   # disabled / muted
 
-    "teal":     "#0DB9D7",   # accent / mic idle / VU bars
-    "blue":     "#6F7591",   # scrollbar thumb / hover
-    "red":      "#F44336",   # stop / error
-    "green":    "#4CAF50",   # ready / speaking
-    "orange":   "#FF9800",   # loading / transcribing
-    "amber":    "#FFC107",   # standby / echo mode waiting
-    "purple":   "#9C27B0",   # wake word detected
-    "focus":    "#5DC3F6",   # keyboard focus ring
+    "teal":     "#00D4AA",   # accent / mic idle / VU bars — vibrant teal-green
+    "blue":     "#5C6BC0",   # scrollbar / hover
+    "red":      "#FF5252",   # stop / error
+    "green":    "#69F0AE",   # ready / speaking — bright mint
+    "orange":   "#FFB74D",   # loading / transcribing
+    "amber":    "#FFD54F",   # standby / echo mode
+    "purple":   "#CE93D8",   # wake word detected
+    "indigo":   "#7986CB",   # accent highlight
+    "focus":    "#4DD0E1",   # keyboard focus ring
 
-    "sb_track": "#3F4140",
-    "sb_thumb": "#6F7591",
+    "sb_track": "#252538",
+    "sb_thumb": "#5C6BC0",
 }
 
 F = {
-    "title":      ("Segoe UI", 12, "bold"),
+    "title":      ("Segoe UI", 11, "bold"),
     "toolbar":    ("Segoe UI", 10),
-    "status":     ("Segoe UI", 10, "italic"),
+    "status":     ("Segoe UI", 10),
     "transcript": ("Segoe UI", 11),
     "small":      ("Segoe UI", 9),
     "badge":      ("Segoe UI", 8),
-    "emoji":      ("Segoe UI Emoji", 14),
+    "emoji":      ("Segoe UI Emoji", 13),
+    "mono":       ("Consolas", 10),
 }
 
 # State key → (display label, colour)
 STATUS_MAP = {
-    "idle":             ("Idle — click ▶ or press F9 to start",   C["text2"]),
-    "loading":          ("Loading model…",                         C["orange"]),
-    "ready":            ("Ready",                                  C["green"]),
-    "listening":        ("Listening…",                             C["teal"]),
-    "listening_active": ("Speaking…",                              C["green"]),
-    "transcribing":     ("Transcribing…",                          C["orange"]),
-    "error":            ("Error — see console for details",        C["red"]),
-    "standby":          ("Say 'Hello Echo' to activate…",          C["amber"]),
-    "wake_detected":    ("Wake word detected! Listening…",         C["purple"]),
+    "idle":             ("Click ▶ or press F9 to start",       C["text2"]),
+    "loading":          ("Loading model…",                     C["orange"]),
+    "ready":            ("Ready",                              C["green"]),
+    "listening":        ("Listening…",                         C["teal"]),
+    "listening_active": ("Speaking detected",                  C["green"]),
+    "transcribing":     ("Transcribing…",                     C["orange"]),
+    "error":            ("Error — see console",                C["red"]),
+    "standby":          ("Say ‘Hello Echo’ to activate",       C["amber"]),
+    "wake_detected":    ("Wake word detected!",                C["purple"]),
 }
 
 
@@ -626,11 +630,37 @@ class SettingsModal:
 # System tray helper
 # ─────────────────────────────────────────────────────────────────────
 
-def _make_tray_icon():
+def _make_tray_icon(state: str = "idle"):
+    """Draw the system tray icon. Color reflects app state."""
     size = 64
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d   = ImageDraw.Draw(img)
-    d.ellipse([4, 4, size-4, size-4], fill=(13, 185, 215, 255))
+    img  = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d    = ImageDraw.Draw(img)
+
+    # Background circle
+    d.ellipse([2, 2, size-2, size-2], fill=(26, 26, 40, 255))
+
+    # State ring colors (matching C tokens)
+    ring_colors = {
+        "ready":        (105, 240, 174, 255),
+        "listening":    (0, 212, 170, 255),
+        "transcribing": (255, 183, 77, 255),
+        "standby":      (255, 213, 79, 255),
+        "error":        (255, 82, 82, 255),
+    }
+    color = ring_colors.get(state, (0, 212, 170, 255))
+    d.ellipse([2, 2, size-2, size-2], outline=color, width=4)
+
+    # Mic body
+    mx, my, mw, mh = size//2, size//2, 12, 18
+    d.rounded_rectangle([mx-mw//2, my-mh//2-2, mx+mw//2, my+mh//2-2],
+                         radius=6, fill=color)
+    # Mic arc
+    d.arc([mx-mw//2-2, my-6, mx+mw//2+2, my+mh//2+6],
+           start=0, end=180, fill=color, width=3)
+    # Mic stem
+    d.line([mx, my+mh//2+2, mx, my+mh//2+8], fill=color, width=3)
+    d.line([mx-5, my+mh//2+8, mx+5, my+mh//2+8], fill=color, width=3)
+
     return img
 
 
@@ -696,8 +726,100 @@ class NirmiqEchoUI:
         self.root.geometry(f"{self.DEF_W}x{self.DEF_H}+{x}+{y}")
         self.root.deiconify()
 
+    def _start_tray(self):
+        """Start the system tray icon (pystray) in a daemon thread."""
+        if not _HAS_TRAY:
+            return
+        try:
+            def _toggle_listen(icon, item):
+                """Toggle listening from tray right-click menu."""
+                if self._listening:
+                    self.app.stop_listening()
+                else:
+                    self.app.start_listening()
+
+            def _toggle_echo(icon, item):
+                """Toggle Echo Mode from tray."""
+                if getattr(self.app, '_echo_mode', False):
+                    self.app.disable_echo_mode()
+                else:
+                    self.app.enable_echo_mode()
+
+            def _show(icon, item):
+                self._show_window()
+
+            def _quit(icon, item):
+                self._on_close()
+
+            menu = pystray.Menu(
+                pystray.MenuItem("NirmiqEcho", _show, default=True),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem(
+                    lambda item: "Stop Listening" if self._listening else "Start Listening",
+                    _toggle_listen,
+                ),
+                pystray.MenuItem(
+                    lambda item: "Echo Mode: ON" if getattr(self.app, '_echo_mode', False)
+                                               else "Echo Mode: OFF",
+                    _toggle_echo,
+                ),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Show Window", _show),
+                pystray.MenuItem("Quit NirmiqEcho", _quit),
+            )
+
+            self._tray = pystray.Icon(
+                "NirmiqEcho",
+                _make_tray_icon("idle"),
+                "NirmiqEcho — Click to show",
+                menu,
+            )
+            threading.Thread(
+                target=self._tray.run,
+                daemon=True,
+                name="TrayThread",
+            ).start()
+            logger.info("System tray started")
+        except Exception as exc:
+            logger.warning("Tray init failed: %s", exc)
+            self._tray = None
+
+    def _update_tray_icon(self, state: str):
+        """Update tray icon color to reflect current app state."""
+        if not _HAS_TRAY or self._tray is None:
+            return
+        try:
+            self._tray.icon  = _make_tray_icon(state)
+            listen_lbl = "Listening…" if self._listening else "Ready"
+            self._tray.title = f"NirmiqEcho — {listen_lbl}"
+        except Exception:
+            pass
+
+    def _hide_to_tray(self):
+        """Hide window to system tray — model stays loaded in memory."""
+        try:
+            self.root.withdraw()
+            if _HAS_TRAY and self._tray:
+                self._tray.notify(
+                    "NirmiqEcho is still running",
+                    "Click the tray icon to restore"
+                )
+        except Exception:
+            pass
+
+    def _show_window(self):
+        """Restore window from tray."""
+        try:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
+            self.root.attributes("-topmost", self._pin.get())
+        except Exception:
+            pass
+
     @staticmethod
     def _apply_dark_titlebar(win):
+        """Apply Windows 11 dark mode to a window titlebar."""
         try:
             import ctypes
             hwnd = win.winfo_id()
@@ -706,6 +828,7 @@ class NirmiqEchoUI:
                 ctypes.sizeof(ctypes.c_int))
         except Exception:
             pass
+
 
     # ─────────────────────────── titlebar ────────────────────────────
 
@@ -733,17 +856,17 @@ class NirmiqEchoUI:
         title.bind("<ButtonPress-1>", self._drag_start)
         title.bind("<B1-Motion>",     self._drag_move)
 
-        # Right controls: close / minimize / settings (packed right→left)
+        # Right controls: close / minimize / settings
         for sym, tip_txt, cmd in [
-            ("✕", "Close  (Ctrl+Q)",  self._on_close),
-            ("─", "Minimize to tray", self._minimize),
-            ("⚙", "Settings",         self._open_settings),
+            ("✕", "Hide to tray  (stays in memory)", self._hide_to_tray),
+            ("─", "Minimize",                         self._minimize),
+            ("⚙", "Settings",                         self._open_settings),
         ]:
             b = tk.Label(tb, text=sym, font=("Segoe UI", 11),
                          bg=C["panel2"], fg=C["text2"],
                          cursor="hand2", padx=9)
             b.pack(side="right")
-            b.bind("<Enter>",           lambda e, w=b: w.configure(fg=C["text"], bg="#4A4F6A"))
+            b.bind("<Enter>",           lambda e, w=b: w.configure(fg=C["text"], bg=C["border"]))
             b.bind("<Leave>",           lambda e, w=b: w.configure(fg=C["text2"], bg=C["panel2"]))
             b.bind("<ButtonRelease-1>", lambda e, fn=cmd: fn())
             Tooltip(b, tip_txt)
@@ -823,30 +946,41 @@ class NirmiqEchoUI:
     # ─────────────────────────── status row ──────────────────────────
 
     def _build_status_row(self):
-        row = tk.Frame(self.root, bg=C["panel2"], pady=5)
-        row.pack(fill="x")
+        wrapper = tk.Frame(self.root, bg=C["panel3"])
+        wrapper.pack(fill="x")
+
+        # Left-edge accent stripe (3px, color changes with state)
+        self._status_stripe = tk.Frame(wrapper, bg=C["text2"], width=3)
+        self._status_stripe.pack(side="left", fill="y")
+
+        row = tk.Frame(wrapper, bg=C["panel3"], pady=6)
+        row.pack(fill="x", expand=True)
 
         self._status_var = tk.StringVar(value=STATUS_MAP["idle"][0])
         self._status_lbl = tk.Label(
             row, textvariable=self._status_var,
-            font=F["status"], bg=C["panel2"], fg=STATUS_MAP["idle"][1],
-            anchor="w", padx=14)
+            font=F["status"], bg=C["panel3"], fg=STATUS_MAP["idle"][1],
+            anchor="w", padx=12)
         self._status_lbl.pack(side="left", fill="x", expand=True)
 
         self._model_lbl = tk.Label(
             row, text="Loading model…",
-            font=F["badge"], bg=C["panel2"], fg=C["text2"],
-            anchor="e", padx=14)
+            font=F["badge"], bg=C["panel3"], fg=C["dim"],
+            anchor="e", padx=12)
         self._model_lbl.pack(side="right")
 
     # ─────────────────────────── transcript ──────────────────────────
 
     def _build_transcript(self):
-        hdr = tk.Frame(self.root, bg=C["panel2"], pady=3)
+        hdr = tk.Frame(self.root, bg=C["panel2"], pady=4)
         hdr.pack(fill="x")
-        tk.Label(hdr, text="TRANSCRIPT", font=F["badge"],
+        # Thin separator line at top of transcript header
+        tk.Frame(hdr, bg=C["border"], height=1).pack(fill="x")
+        inner = tk.Frame(hdr, bg=C["panel2"])
+        inner.pack(fill="x")
+        tk.Label(inner, text="TRANSCRIPT", font=F["badge"],
                  bg=C["panel2"], fg=C["dim"], padx=14).pack(side="left")
-        self._wc_lbl = tk.Label(hdr, text="0 words", font=F["badge"],
+        self._wc_lbl = tk.Label(inner, text="0 words", font=F["badge"],
                                   bg=C["panel2"], fg=C["dim"], padx=14)
         self._wc_lbl.pack(side="right")
 
@@ -855,9 +989,10 @@ class NirmiqEchoUI:
 
         self._txt = tk.Text(
             ta, wrap="word", bg=C["tx_bg"], fg=C["text"],
-            font=F["transcript"], relief="flat", padx=14, pady=10,
+            font=F["transcript"], relief="flat", padx=16, pady=12,
             insertbackground=C["teal"],
             selectbackground=C["blue"], selectforeground=C["text"],
+            spacing1=2, spacing3=2,    # extra line spacing for readability
             cursor="arrow")
         self._txt.pack(side="left", fill="both", expand=True)
         self._txt.config(state="disabled")
@@ -865,18 +1000,25 @@ class NirmiqEchoUI:
         sb = tk.Scrollbar(ta, command=self._txt.yview,
                           bg=C["sb_track"], troughcolor=C["sb_track"],
                           activebackground=C["sb_thumb"],
-                          relief="flat", width=6, highlightthickness=0)
+                          relief="flat", width=5, highlightthickness=0)
         sb.pack(side="right", fill="y")
         self._txt.config(yscrollcommand=sb.set)
 
     # ─────────────────────────── footer ──────────────────────────────
 
     def _build_footer(self):
-        f = tk.Frame(self.root, bg=C["panel"], pady=4)
+        f = tk.Frame(self.root, bg=C["panel"], pady=5)
         f.pack(fill="x", side="bottom")
-        tk.Label(f, text="100% offline · no APIs · Whisper AI",
+        # Thin top border
+        tk.Frame(f, bg=C["border"], height=1).pack(fill="x")
+        row = tk.Frame(f, bg=C["panel"])
+        row.pack(fill="x")
+        tk.Label(row, text="🔒 offline  ·  Whisper medium  ·  F9 to toggle",
                  font=F["badge"], bg=C["panel"], fg=C["dim"],
                  padx=14).pack(side="right")
+        tk.Label(row, text="NirmiqEcho",
+                 font=F["badge"], bg=C["panel"], fg=C["indigo"],
+                 padx=14).pack(side="left")
 
     # ─────────────────────────── resize grip ─────────────────────────
 
@@ -959,6 +1101,11 @@ class NirmiqEchoUI:
         label, color = STATUS_MAP.get(key, STATUS_MAP["idle"])
         self._status_var.set(label)
         self._status_lbl.config(fg=color)
+        # Update accent stripe on status row
+        try:
+            self._status_stripe.config(bg=color)
+        except Exception:
+            pass
         # Disable mic button while model is loading
         try:
             self._mic_btn.set_enabled(key != "loading")
@@ -977,6 +1124,11 @@ class NirmiqEchoUI:
             else:
                 echo_on = self._echo_var.get()
                 self._echo_indicator.config(fg=C["amber"] if echo_on else C["dim"])
+        except Exception:
+            pass
+        # Update tray icon color
+        try:
+            self._update_tray_icon(key)
         except Exception:
             pass
 
@@ -1115,15 +1267,13 @@ class NirmiqEchoUI:
     # ─────────────────────────── tray / window ───────────────────────
 
     def _minimize(self):
-        if _HAS_TRAY:
-            self.root.withdraw()
-            self._start_tray()
+        """Minimize: hide to tray if available, else iconify."""
+        if _HAS_TRAY and self._tray:
+            self._hide_to_tray()
         else:
-            # No tray: temporarily restore OS frame so iconify works
             self._iconified = True
             self.root.overrideredirect(False)
             self.root.iconify()
-            # Re-apply custom titlebar only after the user restores from taskbar
             self.root.bind("<Map>", self._on_map_after_iconify)
 
     def _on_map_after_iconify(self, _=None):
@@ -1133,26 +1283,7 @@ class NirmiqEchoUI:
         self.root.unbind("<Map>")
         self.root.overrideredirect(True)
 
-    def _start_tray(self):
-        if self._tray is not None:
-            return
-
-        def _restore(icon, item):
-            icon.stop()
-            self._tray = None
-            self.root.after(0, self.root.deiconify)
-
-        def _exit(icon, item):
-            icon.stop()
-            self.root.after(0, self._on_close)
-
-        menu = pystray.Menu(
-            pystray.MenuItem("Show NirmiqEcho", _restore, default=True),
-            pystray.MenuItem("Exit",            _exit),
-        )
-        img       = _make_tray_icon()
-        self._tray = pystray.Icon("NirmiqEcho", img, "NirmiqEcho", menu)
-        threading.Thread(target=self._tray.run, daemon=True).start()
+    # (tray is started once in _build via _start_tray — see above)
 
     def _on_close(self):
         if self._tray:
