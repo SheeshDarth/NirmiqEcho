@@ -24,11 +24,11 @@ if errorlevel 1 (
 :: First-run: install dependencies
 if not exist ".deps_ok" (
     echo  [SETUP] Installing dependencies — this may take a few minutes on first run...
-    echo  [SETUP] Whisper model will download ~1.5 GB on first use.
+    echo  [SETUP] Whisper large-v3 model already downloaded — no extra download needed.
     echo.
-    pip install -r requirements.txt --quiet
+    pip install -r voiceflow_local\requirements.txt --quiet
     if errorlevel 1 (
-        echo  [ERROR] Dependency install failed. Run: pip install -r requirements.txt
+        echo  [ERROR] Dependency install failed. Run: pip install -r voiceflow_local\requirements.txt
         pause & exit /b 1
     )
     echo. > .deps_ok
@@ -42,10 +42,12 @@ if not exist ".env" (
 )
 
 echo  [INFO] Starting NirmiqEcho...
-echo  [INFO] Look for the orb icon in your system tray.
-echo  [INFO] The Whisper model loads on first run (~5-10 seconds).
+echo  [INFO] Look for the mic icon in your system tray.
+echo  [INFO] Whisper large-v3 model loads from local cache (~10-20 seconds).
+echo  [INFO] Press F9 to start/stop listening.
 echo.
 
+cd /d "%~dp0voiceflow_local"
 python main.py
 
 :: If it crashes, keep the window open to see the error

@@ -17,6 +17,7 @@ VAD tuning:
 """
 from __future__ import annotations
 
+import os
 import threading
 import queue
 import time
