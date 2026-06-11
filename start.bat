@@ -43,7 +43,7 @@ if not exist ".env" (
 
 echo  [INFO] Starting NirmiqEcho...
 echo  [INFO] Look for the mic icon in your system tray.
-echo  [INFO] Whisper large-v3 model loads from local cache (~10-20 seconds).
+echo  [INFO] Whisper model loads from local cache in ~2 seconds.
 echo  [INFO] Press F9 to start/stop listening.
 echo.
 

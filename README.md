@@ -21,10 +21,13 @@ A Jarvis-grade voice assistant that lives in your system tray. 100% local,
 Double-click **`start.bat`**. That's it.
 
 - First run installs dependencies automatically
-- Whisper large-v3 loads from the local `models/` cache (no download)
+- Whisper loads from the local `models/` cache in under 2 seconds (no download)
 - A mic icon appears in your **system tray** — Echo is alive
 - Press **F9** to start/stop listening, or enable **Echo Mode** and just say
   **"Hello Echo"**
+
+Want it always on? Run **`install_autostart.bat`** once — Echo then launches
+silently at every login.
 
 ## What it can do
 
@@ -53,28 +56,39 @@ should I say?"* → speak your message → sent).
 mic → webrtcvad (VAD, pre-boosted for quiet voices)
     → noisereduce (spectral subtraction, ambient noise profile)
     → gain normalisation
-    → faster-whisper large-v3 (int8, ~98% accuracy, accent-tuned prompt)
+    → faster-whisper (int8, accent-tuned prompt)
     → PostProcessor (fillers, accent corrections, hallucination filter)
     → CommandProcessor (60+ regex patterns, conversation state machine)
     → execute │ dictate
     → pyttsx3 TTS (Windows SAPI — offline voice feedback)
 ```
 
-| Component | Tech | RAM |
-|-----------|------|-----|
-| Transcription | faster-whisper large-v3, int8 | ~3 GB |
+| Component | Tech | Memory |
+|-----------|------|--------|
+| Transcription | faster-whisper, auto GPU/CPU | 3.5 GB VRAM (GPU) or 500 MB RAM (CPU) |
 | Wake word | faster-whisper tiny.en | ~80 MB |
 | TTS | Windows SAPI (pyttsx3) | ~3 MB |
 | Tray + UI | pystray + tkinter | ~30 MB |
 
-**Lighter machine?** Set `WHISPER_MODEL=medium.en` (~1.5 GB, 96%) or
-`small.en` (~500 MB, 93%) in `.env`.
+**Model auto-detection** — benchmarked on the owner's real voice samples
+(2026-06-10, `test_accuracy.py`), all pre-downloaded in `models/`:
+
+| Config | Accuracy | Command latency |
+|--------|----------|----------------|
+| GPU → `large-v3` float16 (default on RTX 4050) | ~99.5% | 1–2 s ⚡ |
+| CPU → `small.en` int8 (fallback) | ~97% | 1–2 s ⚡ |
+| CPU `medium.en` (opt-in) | ~99% | 3–5 s |
+
+If the GPU is busy or breaks, Echo degrades gracefully:
+large-v3 float16 → large-v3 int8 → small.en CPU. It always comes up.
+(distil-large-v3 was tested and rejected — fast, but mangles
+Indian-accented English.)
 
 ## Tuning (.env)
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `WHISPER_MODEL` | `large-v3` | Already downloaded in `models/` |
+| `WHISPER_MODEL` | *(blank = auto)* | GPU→large-v3, CPU→small.en; set to force |
 | `NOISE_REDUCE_STRENGTH` | `0.65` | Raise to 0.8 in very noisy rooms |
 | `SPEECH_RMS_THRESHOLD` | `400` | Legacy prototype setting only |
 
