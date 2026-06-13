@@ -1,0 +1,12 @@
+# Model assignments. Names resolve through ModelRouter, which falls back to
+# any installed Ollama model if the configured one is missing.
+ollama_endpoint: http://localhost:11434
+
+models:
+  command:   qwen3.5:4b                    # fast intent + simple plans
+  planning:  qwen3.5:4b                    # multi-step plan generation
+  reasoning: mistral:7b-instruct-q4_K_M    # summaries, research synthesis
+
+# Installed on this machine (for reference):
+# qwen3.5:4b · deepseek-r1:8b · mistral:7b-instruct-q4_K_M ·
+# deepseek-coder:6.7b · nomic-embed-text:latest

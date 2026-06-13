@@ -1,0 +1,14 @@
+# Nirmiq Echo — user configuration. Overrides core/config/defaults.yaml.
+log_level: INFO
+
+voice:
+  whisper_model: small.en      # GPU auto-upgrades to large-v3
+  wake_word: nirmiq
+  wake_confidence: 0.5
+  noise_suppression: true
+  # input_device:  Microphone Array   # pin a mic; blank = auto-detect
+
+server:
+  host: 127.0.0.1
+  ws_port: 8765
+  http_port: 8766

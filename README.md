@@ -1,129 +1,68 @@
-# NirmiqEcho — codename **WRAITH**
+# NirmiqEcho
 
-> **W**indows **R**esident **A**ssistant — **I**ntelligent, **T**otally **H**eadless
+A local-first voice assistant for Windows. Your speech, understood and acted on
+entirely on your machine — no cloud.
 
-**Every Command, Handled Offline.**
+This folder holds **two implementations** that share the same Whisper models and
+voice samples. Pick the one you want to run:
 
-A Jarvis-grade voice assistant that lives in your system tray. 100% local,
-100% offline, zero cloud. Your voice never leaves your laptop.
+| | What it is | Run it |
+|---|---|---|
+| **voiceflow_local/** | The shipping **tkinter Jarvis** — system-tray app, 90+ regex/offline commands (apps, WhatsApp, Spotify, files, math, units), faster-whisper, mic auto-rescue. Fast, fully offline, no LLM. | double-click **`start.bat`** |
+| **core/ + ui/** | The newer **voice OS** — a local LLM (Ollama) plans your intent into verified tool steps, FastAPI + WebSocket backend, browser dashboard. "Understand anything" phrasing. | `pip install -e .` then `python -m core.main`, open http://127.0.0.1:8766 |
 
-```
-███╗   ██╗██╗██████╗ ███╗   ███╗██╗ ██████╗     ███████╗ ██████╗██╗  ██╗ ██████╗
-████╗  ██║██║██╔══██╗████╗ ████║██║██╔═══██╗    ██╔════╝██╔════╝██║  ██║██╔═══██╗
-██╔██╗ ██║██║██████╔╝██╔████╔██║██║██║   ██║    █████╗  ██║     ███████║██║   ██║
-██║╚██╗██║██║██╔══██╗██║╚██╔╝██║██║██║▄▄ ██║    ██╔══╝  ██║     ██╔══██║██║   ██║
-██║ ╚████║██║██║  ██║██║ ╚═╝ ██║██║╚██████╔╝    ███████╗╚██████╗██║  ██║╚██████╔╝
-╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝ ╚══▀▀═╝     ╚══════╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝
-```
+Both are NirmiqEcho. The tray app is the dependable daily driver; the OS is the
+LLM-planner future. They were merged into one folder so they share `models/`
+and the `Test*.m4a` accent samples.
 
-## Quick start
-
-Double-click **`start.bat`**. That's it.
-
-- First run installs dependencies automatically
-- Whisper loads from the local `models/` cache in under 2 seconds (no download)
-- A mic icon appears in your **system tray** — Echo is alive
-- Press **F9** to start/stop listening, or enable **Echo Mode** and just say
-  **"Hello Echo"**
-
-Want it always on? Run **`install_autostart.bat`** once — Echo then launches
-silently at every login.
-
-## What it can do
-
-| Say | What happens |
-|-----|--------------|
-| "Open Chrome" / "Close Spotify" | Launches/kills any installed app (registry + Start Menu discovery) |
-| "Message Rahul and say I'll be late" | Opens WhatsApp, finds Rahul, types + sends |
-| "Play Shape of You" | Local file → Spotify → YouTube, in that order |
-| "Find my resume" / "Open the budget file" | Fuzzy file search across Desktop/Documents/Downloads |
-| "Set a timer for 10 minutes" | Timer with voice + popup alert |
-| "What time is it" / "Battery" | Spoken answers |
-| "Volume up" / "Set volume to 40" / "Brightness down" | System control |
-| "Scroll down" / "New tab" / "Switch window" / "Snap left" | Navigation |
-| "Take a screenshot" / "Lock screen" / "Empty recycle bin" | System actions |
-| "Type [anything]" | Dictates into whatever app has focus |
-| "What can you do?" | Echo introduces its abilities |
-| "Who are you?" | Meet WRAITH |
-| Anything else | Typed into the focused window (dictation mode) |
-
-60+ command patterns. Multi-step conversations ("Message Rahul" → *"What
-should I say?"* → speak your message → sent).
-
-## Architecture (all local, all offline)
+## Quick start — tray Jarvis (no setup)
 
 ```
-mic → webrtcvad (VAD, pre-boosted for quiet voices)
-    → noisereduce (spectral subtraction, ambient noise profile)
-    → gain normalisation
-    → faster-whisper (int8, accent-tuned prompt)
-    → PostProcessor (fillers, accent corrections, hallucination filter)
-    → CommandProcessor (60+ regex patterns, conversation state machine)
-    → execute │ dictate
-    → pyttsx3 TTS (Windows SAPI — offline voice feedback)
+start.bat
 ```
+Look for the mic icon in the system tray. Press F9 to listen. Say "open chrome",
+"what is 50 times 4", "message Rahul saying running late", etc.
 
-| Component | Tech | Memory |
-|-----------|------|--------|
-| Transcription | faster-whisper, auto GPU/CPU | 3.5 GB VRAM (GPU) or 500 MB RAM (CPU) |
-| Wake word | faster-whisper tiny.en | ~80 MB |
-| TTS | Windows SAPI (pyttsx3) | ~3 MB |
-| Tray + UI | pystray + tkinter | ~30 MB |
-
-**Model auto-detection** — benchmarked on the owner's real voice samples
-(2026-06-10, `test_accuracy.py`), all pre-downloaded in `models/`:
-
-| Config | Accuracy | Command latency |
-|--------|----------|----------------|
-| GPU → `large-v3` float16 (default on RTX 4050) | ~99.5% | 1–2 s ⚡ |
-| CPU → `small.en` int8 (fallback) | ~97% | 1–2 s ⚡ |
-| CPU `medium.en` (opt-in) | ~99% | 3–5 s |
-
-If the GPU is busy or breaks, Echo degrades gracefully:
-large-v3 float16 → large-v3 int8 → small.en CPU. It always comes up.
-(distil-large-v3 was tested and rejected — fast, but mangles
-Indian-accented English.)
-
-## Tuning (.env)
-
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `WHISPER_MODEL` | *(blank = auto)* | GPU→large-v3, CPU→small.en; set to force |
-| `NOISE_REDUCE_STRENGTH` | `0.65` | Raise to 0.8 in very noisy rooms |
-| `SPEECH_RMS_THRESHOLD` | `400` | Legacy prototype setting only |
-
-In-app Settings (gear icon): VAD sensitivity 0–3, language, typing mode,
-re-analyse voice samples.
-
-## Verify accuracy on your own voice
+## Quick start — voice OS (needs Ollama)
 
 ```
-cd voiceflow_local
-python test_accuracy.py            # large-v3 (default)
-python test_accuracy.py medium.en  # compare models
+pip install -e .
+ollama serve              # keep this running — the planner needs it
+python -m core.main       # backend + dashboard at http://127.0.0.1:8766
+set NIRMIQ_VOICE=1 && python -m core.main   # also listen on the mic
+```
+Type or speak a command; watch it plan and execute live in the dashboard.
+The OS reuses the `models/` cache here, so no multi-GB re-download.
+
+## Layout
+
+```
+NirmiqEcho/
+├── start.bat              ← launches the tray Jarvis
+├── voiceflow_local/       ← tray Jarvis app (Python, tkinter, regex engine)
+├── legacy_prototype/      ← archived early prototype
+│
+├── pyproject.toml         ← the voice OS package
+├── setup.bat              ← installs the OS + runs its tests
+├── core/                  ← OS backend: voice, engine (planner/executor),
+│                            models (Ollama), tools (21), memory, api
+├── ui/web/                ← OS dashboard (served by the backend)
+├── tests/                 ← OS test suite (pytest)
+├── plugins/ · config/     ← OS plugin interface + config
+│
+├── models/                ← shared faster-whisper cache (gitignored)
+├── Test*.m4a              ← your voice samples (accent profiling)
+└── assets/                ← accent profile, icons
 ```
 
-Transcribes the `Test*.m4a` samples through the exact production pipeline
-and prints text + real-time factor.
+## Security
 
-## Project layout
-
-```
-Voice-text/
-├── start.bat            ← double-click to launch
-├── .env                 ← config (created on first run)
-├── models/              ← Whisper models (gitignored, ~3 GB)
-├── Test*.m4a            ← your voice samples (accent profiling)
-├── voiceflow_local/     ← THE app (its own git repo, full history)
-│   ├── main.py          ← entry point + app controller
-│   ├── audio_handler.py ← mic, VAD, noise reduction
-│   ├── transcription.py ← faster-whisper engine
-│   ├── command_processor.py ← 60+ Jarvis commands
-│   ├── ui.py            ← tray icon + floating window
-│   ├── wake_word.py     ← "Hello Echo" detector
-│   └── ...
-└── legacy_prototype/    ← earlier root-level prototype (archived)
-```
+The voice OS executes real actions, so it is hardened: tools self-verify
+(never fake success), the planner only runs whitelisted tools with validated
+args (never raw LLM output), HIGH-risk steps (delete, terminal) require explicit
+confirmation, destructive shell commands are blocklisted, file writes to
+system/startup locations are refused, the server binds to localhost and rejects
+cross-origin browser requests, and the dashboard escapes all untrusted text.
 
 ---
-*NirmiqEcho is part of the Nirmiq umbrella. Built by Siddharth.*
+*Part of the Nirmiq umbrella. Built by Siddharth.*

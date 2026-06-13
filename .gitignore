@@ -2,15 +2,28 @@
 .env
 .deps_ok
 
-# Whisper models (3+ GB — re-downloaded automatically)
+# Whisper models (several GB — re-downloaded / reused automatically)
 models/
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+build/
+dist/
+.pytest_cache/
 .venv/
 venv/
+
+# Local data
+*.db
+.nirmiq-echo/
+
+# Node / Electron (when the native shell lands)
+node_modules/
+ui/dist/
+ui/.vite/
 
 # Logs
 *.log
@@ -19,3 +32,5 @@ logs/
 # OS
 Thumbs.db
 desktop.ini
+
+COMMIT_MSG.tmp
