@@ -1,68 +1,77 @@
 # NirmiqEcho
 
-A local-first voice assistant for Windows. Your speech, understood and acted on
-entirely on your machine — no cloud.
+A local-first **JARVIS-style voice assistant** for Windows. Speak, and it acts —
+opening apps, messaging on WhatsApp, playing music, finding files, doing math,
+controlling the system. Runs in your system tray. Your voice never leaves your
+machine.
 
-This folder holds **two implementations** that share the same Whisper models and
-voice samples. Pick the one you want to run:
-
-| | What it is | Run it |
-|---|---|---|
-| **voiceflow_local/** | The shipping **tkinter Jarvis** — system-tray app, 90+ regex/offline commands (apps, WhatsApp, Spotify, files, math, units), faster-whisper, mic auto-rescue. Fast, fully offline, no LLM. | double-click **`start.bat`** |
-| **core/ + ui/** | The newer **voice OS** — a local LLM (Ollama) plans your intent into verified tool steps, FastAPI + WebSocket backend, browser dashboard. "Understand anything" phrasing. | `pip install -e .` then `python -m core.main`, open http://127.0.0.1:8766 |
-
-Both are NirmiqEcho. The tray app is the dependable daily driver; the OS is the
-LLM-planner future. They were merged into one folder so they share `models/`
-and the `Test*.m4a` accent samples.
-
-## Quick start — tray Jarvis (no setup)
+## Run it
 
 ```
 start.bat
 ```
-Look for the mic icon in the system tray. Press F9 to listen. Say "open chrome",
-"what is 50 times 4", "message Rahul saying running late", etc.
 
-## Quick start — voice OS (needs Ollama)
+A mic icon appears in your system tray. Press **F9** to start/stop listening
+(or enable "Hello Echo" wake word). Then just talk:
 
-```
-pip install -e .
-ollama serve              # keep this running — the planner needs it
-python -m core.main       # backend + dashboard at http://127.0.0.1:8766
-set NIRMIQ_VOICE=1 && python -m core.main   # also listen on the mic
-```
-Type or speak a command; watch it plan and execute live in the dashboard.
-The OS reuses the `models/` cache here, so no multi-GB re-download.
+> "open chrome" · "play despacito" · "message Rahul saying running late"
+> "what's 47 times 19" · "set a timer for 10 minutes" · "find my resume"
+> "take a screenshot" · "volume up" · "what time is it"
+
+First run installs dependencies and loads the Whisper model from `models/`.
+
+## How it understands you
+
+Two layers, so it's both **instant** and **flexible**:
+
+1. **Offline command engine** — 90+ built-in patterns (apps, WhatsApp, Spotify,
+   files, math, units, system control). Runs locally with faster-whisper, no
+   internet, ~1-2s. This is the dependable core.
+2. **Local-LLM fallback (optional)** — if you phrase something it doesn't
+   recognise ("fire up my browser", "I wanna hear some lofi"), Echo asks a
+   **local Ollama model** to map it to a known command. Fully offline (localhost,
+   no API key). If Ollama isn't running, this is skipped instantly and Echo keeps
+   working with the built-in commands.
+
+To enable the fallback: install [Ollama](https://ollama.com), `ollama pull
+qwen3.5:4b`, and keep it running. Configure in `.env` (see `.env.example`).
+
+## Accuracy & mic
+
+- Whisper auto-selects **large-v3 on GPU** (≈99% on the owner's voice) or
+  **small.en on CPU**. Override with `WHISPER_MODEL` in `.env`.
+- The mic is self-healing: it auto-unmutes a Windows-muted default mic, skips
+  driver spin-up silence, and scans for a live device if the default is dead
+  (e.g. idle Bluetooth buds). Diagnose anytime:
+  `cd voiceflow_local && python mic_check.py`.
 
 ## Layout
 
 ```
 NirmiqEcho/
-├── start.bat              ← launches the tray Jarvis
-├── voiceflow_local/       ← tray Jarvis app (Python, tkinter, regex engine)
-├── legacy_prototype/      ← archived early prototype
-│
-├── pyproject.toml         ← the voice OS package
-├── setup.bat              ← installs the OS + runs its tests
-├── core/                  ← OS backend: voice, engine (planner/executor),
-│                            models (Ollama), tools (21), memory, api
-├── ui/web/                ← OS dashboard (served by the backend)
-├── tests/                 ← OS test suite (pytest)
-├── plugins/ · config/     ← OS plugin interface + config
-│
-├── models/                ← shared faster-whisper cache (gitignored)
+├── start.bat              ← launch the assistant
+├── voiceflow_local/       ← the app
+│   ├── main.py            ← entry point / orchestrator
+│   ├── audio_handler.py   ← mic capture + VAD + noise reduction
+│   ├── transcription.py   ← faster-whisper (GPU/CPU auto)
+│   ├── command_processor.py ← 90+ offline commands
+│   ├── llm_fallback.py    ← optional local-Ollama "understand anything"
+│   ├── calculator.py · units.py ← offline math / conversions
+│   ├── wake_word.py · tts_engine.py · ui.py (tray) · ...
+│   └── mic_check.py       ← mic diagnostic
+├── models/                ← faster-whisper cache (gitignored)
 ├── Test*.m4a              ← your voice samples (accent profiling)
-└── assets/                ← accent profile, icons
+├── .env.example           ← copy to .env to configure
+└── install_autostart.bat  ← optional: launch at login
 ```
 
-## Security
+## Safety
 
-The voice OS executes real actions, so it is hardened: tools self-verify
-(never fake success), the planner only runs whitelisted tools with validated
-args (never raw LLM output), HIGH-risk steps (delete, terminal) require explicit
-confirmation, destructive shell commands are blocklisted, file writes to
-system/startup locations are refused, the server binds to localhost and rejects
-cross-origin browser requests, and the dashboard escapes all untrusted text.
+Voice-driven OS automation, hardened: voice-derived text never reaches a shell
+(`shell=True` is never used; app/process names are whitelist-validated),
+high-risk actions (file delete, etc.) confirm first, and the LLM fallback only
+*rewrites* into the same whitelisted commands — it never executes free-form
+output.
 
 ---
 *Part of the Nirmiq umbrella. Built by Siddharth.*
