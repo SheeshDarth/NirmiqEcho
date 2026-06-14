@@ -2,6 +2,11 @@
 .env
 .deps_ok
 
+# Personal voice data — never publish the owner's recordings or speech profile
+*.m4a
+*.wav
+voiceflow_local/assets/accent_profile.json
+
 # Whisper models (several GB — re-downloaded / reused automatically)
 models/
 

@@ -24,7 +24,7 @@ if errorlevel 1 (
 :: First-run: install dependencies
 if not exist ".deps_ok" (
     echo  [SETUP] Installing dependencies — this may take a few minutes on first run...
-    echo  [SETUP] Whisper large-v3 model already downloaded — no extra download needed.
+    echo  [SETUP] The Whisper model downloads automatically on first launch if not cached.
     echo.
     pip install -r voiceflow_local\requirements.txt --quiet
     if errorlevel 1 (
@@ -38,7 +38,8 @@ if not exist ".deps_ok" (
 :: Create .env if missing
 if not exist ".env" (
     copy ".env.example" ".env" >nul
-    echo  [INFO] Created .env - add your ANTHROPIC_API_KEY for complex commands.
+    echo  [INFO] Created .env - 100%% offline by default. Optional: install Ollama
+    echo  [INFO] for "understand anything" phrasing (see .env / README).
 )
 
 echo  [INFO] Starting NirmiqEcho...
