@@ -36,7 +36,7 @@ def main():
         ("whatsapp mom", "whatsapp_contact"),
         # web + system + info
         ("search for python tutorials", "search_web"),
-        ("what is the capital of France", "search_web"),
+        ("what is the capital of France", "answer_question"),  # answered aloud now
         ("what time is it", "tell_time"),
         ("set a timer for 5 minutes", "set_timer"),
         ("volume up", "volume_up"),

@@ -69,7 +69,7 @@ _CONV_LEAD = re.compile(
     r"echo|nirmiq|jarvis|please|kindly|just|now|"
     r"can you|could you|would you|will you|can u|"
     r"i want to|i wanna|i'd like to|i would like to|i need to|i need you to|"
-    r"tell me|show me|let's|lets|go ahead and|help me|for me)\b[\s,]*)+",
+    r"let's|lets|go ahead and|help me|for me)\b[\s,]*)+",
     re.IGNORECASE)
 _CONV_TRAIL = re.compile(
     r"[\s,]*\b(?:please|for me|right now|real quick|thanks|thank you)\b[\s.!?]*$",
@@ -81,6 +81,21 @@ def _strip_conversational(text: str) -> str:
     out = _CONV_LEAD.sub("", text).strip()
     out = _CONV_TRAIL.sub("", out).strip()
     return out or text   # never strip down to nothing
+
+
+# Offline one-liners for the "tell me a joke" command (no external dependency).
+_JOKES = [
+    "Why do programmers prefer dark mode? Because light attracts bugs.",
+    "I told my computer I needed a break, and now it won't stop sending me KitKat ads.",
+    "Why did the developer go broke? Because he used up all his cache.",
+    "There are 10 kinds of people in the world: those who understand binary and those who don't.",
+    "Why was the JavaScript developer sad? Because he didn't know how to null his feelings.",
+    "I would tell you a UDP joke, but you might not get it.",
+    "Why do Java developers wear glasses? Because they don't C sharp.",
+    "A SQL query walks into a bar, goes up to two tables and asks: can I join you?",
+    "Why did the computer go to the doctor? It had a virus.",
+    "I'm reading a book about anti-gravity. It's impossible to put down.",
+]
 
 
 # Voice-derived text must NEVER reach a shell unsanitized — a malicious
@@ -117,6 +132,22 @@ PATTERNS: list[tuple[re.Pattern, str]] = [
                                                              "tell_date"),
     (_p(r"^(?:what(?:'s|\s+is)?\s+)?(?:the\s+)?battery(?:\s+(?:level|percentage|status))?[\?]?$"),
                                                              "tell_battery"),
+    (_p(r"^(?:what(?:'s|\s+is)?\s+)?(?:the\s+)?(?:cpu|c\.?p\.?u\.?)(?:\s+(?:usage|load))?[\?]?$"),
+                                                             "tell_cpu"),
+    (_p(r"^(?:system\s+status|how(?:'s|\s+is)\s+(?:my\s+|the\s+)?(?:system|pc|computer|laptop))[\?]?$"),
+                                                             "system_status"),
+
+    # ── Jokes ─────────────────────────────────────────────────────────
+    (_p(r"^(?:tell\s+me\s+)?(?:a\s+)?joke(?:\s+please)?$"),  "tell_joke"),
+    (_p(r"^(?:make\s+me\s+laugh|say\s+something\s+funny|got\s+any\s+jokes)$"),
+                                                             "tell_joke"),
+
+    # ── Remember / recall (lightweight local memory) ──────────────────
+    (_p(r"^remember\s+(?:that\s+|this[:,]?\s+)?(.+)$"),      "remember"),
+    (_p(r"^(?:what\s+do\s+you\s+remember|what\s+did\s+i\s+(?:tell|ask)\s+you\s+to\s+remember|recall(?:\s+everything)?|what\s+have\s+you\s+remembered)[\?]?$"),
+                                                             "recall"),
+    (_p(r"^(?:forget\s+everything|clear\s+(?:your\s+)?memory)$"),
+                                                             "forget_all"),
 
     # ── Timer ────────────────────────────────────────────────────────
     (_p(r"^set\s+(?:a\s+)?timer\s+(?:for\s+)?(\d+)\s*(minute[s]?|min[s]?|second[s]?|sec[s]?|hour[s]?|hr[s]?)$"),
@@ -211,9 +242,16 @@ PATTERNS: list[tuple[re.Pattern, str]] = [
                                                              "focus_app"),
 
     # ── Web search ───────────────────────────────────────────────────
-    (_p(r"^(?:search(?:\s+for)?|google(?:\s+for)?)\s+(.+)$"), "search_web"),
-    (_p(r"^(?:look\s+up|what\s+is|who\s+is|how\s+(?:to|do))\s+(.+)$"),
+    (_p(r"^(?:search(?:\s+for)?|google(?:\s+for)?|look\s+up|how\s+(?:to|do))\s+(.+)$"),
                                                              "search_web"),
+    # Spoken Q&A — answer aloud (Wikipedia → local LLM), web-search fallback.
+    # Math / time / date / battery are matched earlier, so by here a "what is"
+    # is a genuine factual question. The (?!you...) guard keeps self-questions
+    # ("who are you") routing to the assistant's own introduction below.
+    (_p(r"^(?:who\s+(?:is|are|was|were)\s+(?!you\b|u\b|yourself\b|i\b|me\b)"
+        r"|what\s+(?:is|are|was|were)\s+|what's\s+"
+        r"|tell\s+me\s+about\s+|how\s+(?:does|did)\s+)(.+)$"),
+                                                             "answer_question"),
 
     # ── YouTube ──────────────────────────────────────────────────────
     (_p(r"^(?:youtube|watch|play\s+on\s+youtube)\s+(.+)$"), "youtube"),
@@ -483,6 +521,13 @@ class CommandProcessor:
             "tell_time":          lambda: self._tell_time(),
             "tell_date":          lambda: self._tell_date(),
             "tell_battery":       lambda: self._tell_battery(),
+            "tell_cpu":           lambda: self._tell_cpu(),
+            "system_status":      lambda: self._system_status(),
+            "answer_question":    lambda: self._answer_question(g.get("query", "")),
+            "tell_joke":          lambda: self._tell_joke(),
+            "remember":           lambda: self._remember(g.get("text", "")),
+            "recall":             lambda: self._recall(),
+            "forget_all":         lambda: self._forget_all(),
             "set_timer":          lambda: self._set_timer(int(g.get("amount", 1)),
                                                            g.get("unit", "min")),
             "cancel_timer":       lambda: self._cancel_timers(),
@@ -610,6 +655,14 @@ class CommandProcessor:
         elif action in ("search_web",):
             return CommandResult(True, action, {"query": arg},
                                  raw, feedback=f"Searching: {arg}")
+
+        elif action == "answer_question":
+            return CommandResult(True, action, {"query": arg},
+                                 raw, feedback=f"Looking that up...")
+
+        elif action == "remember":
+            return CommandResult(True, action, {"text": arg},
+                                 raw, feedback="Noted.")
 
         elif action == "open_url":
             url = arg if arg.startswith("http") else f"https://{arg}"
@@ -1453,6 +1506,93 @@ class CommandProcessor:
                 self._tts_speak("Battery info not available.")
         except Exception:
             self._tts_speak("Battery info not available.")
+
+    def _tell_cpu(self) -> None:
+        try:
+            import psutil
+            cpu = psutil.cpu_percent(interval=0.4)
+            self._tts_speak(f"CPU usage is at {int(cpu)} percent.")
+        except Exception:
+            self._tts_speak("I couldn't read the CPU usage.")
+
+    def _system_status(self) -> None:
+        try:
+            import psutil
+            cpu = psutil.cpu_percent(interval=0.4)
+            mem = psutil.virtual_memory().percent
+            parts = [f"CPU at {int(cpu)} percent", f"memory at {int(mem)} percent"]
+            batt = psutil.sensors_battery()
+            if batt:
+                parts.append(f"battery at {int(batt.percent)} percent")
+            self._tts_speak("System status: " + ", ".join(parts) + ".")
+        except Exception:
+            self._tts_speak("I couldn't read the system status.")
+
+    def _answer_question(self, query: str) -> None:
+        """Speak a concise answer (Wikipedia → local LLM); else web-search."""
+        query = (query or "").strip()
+        if not query:
+            return
+        ans = None
+        try:
+            import knowledge
+            ans = knowledge.answer(query)
+        except Exception as exc:
+            logger.debug("answer_question error: %s", exc)
+        if ans:
+            self._tts_speak(ans)
+        else:
+            # No offline/online answer available — fall back to a web search.
+            self._tts_speak(f"Here's what I found for {query}.")
+            self._search_web(query)
+
+    def _tell_joke(self) -> None:
+        import random
+        self._tts_speak(random.choice(_JOKES))
+
+    # ── lightweight remember / recall (local JSON) ────────────────────
+    def _memory_path(self):
+        return Path(__file__).resolve().parent / "assets" / "memory.json"
+
+    def _load_facts(self) -> list:
+        import json
+        p = self._memory_path()
+        try:
+            return json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
+        except Exception:
+            return []
+
+    def _save_facts(self, facts: list) -> None:
+        import json
+        p = self._memory_path()
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(facts, ensure_ascii=False, indent=2),
+                         encoding="utf-8")
+        except Exception as exc:
+            logger.warning("could not save memory: %s", exc)
+
+    def _remember(self, text: str) -> None:
+        text = (text or "").strip()
+        if not text:
+            self._tts_speak("What should I remember?")
+            return
+        facts = self._load_facts()
+        facts.append(text)
+        self._save_facts(facts)
+        self._tts_speak("Okay, I'll remember that.")
+
+    def _recall(self) -> None:
+        facts = self._load_facts()
+        if not facts:
+            self._tts_speak("You haven't asked me to remember anything yet.")
+            return
+        recent = facts[-5:]
+        self._tts_speak("Here's what I remember. " + ". ".join(recent) + ".")
+
+    def _forget_all(self) -> None:
+        self._save_facts([])
+        self._tts_speak("Done. I've cleared everything you asked me to remember.")
 
     def _set_timer(self, amount: int, unit: str) -> None:
         seconds = amount

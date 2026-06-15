@@ -17,6 +17,8 @@ A mic icon appears in your system tray. Press **F9** to start/stop listening
 > "open chrome" · "play despacito" · "message Rahul saying running late"
 > "what's 47 times 19" · "set a timer for 10 minutes" · "find my resume"
 > "take a screenshot" · "volume up" · "what time is it"
+> "who is Einstein" · "what is photosynthesis" · "tell me a joke"
+> "remember that my locker code is 4821" · "what do you remember" · "cpu usage"
 
 First run installs dependencies and loads the Whisper model from `models/`.
 

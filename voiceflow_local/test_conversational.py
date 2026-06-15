@@ -14,7 +14,7 @@ def main():
         ("could you set a timer for 5 minutes", "set_timer"),
         ("i wanna open downloads", "open_folder"),
         ("go ahead and take a screenshot", "screenshot"),
-        ("can you tell me what time is it", "tell_time"),
+        ("can you tell me the time", "tell_time"),
         # must NOT over-strip real commands:
         ("open chrome", "open_app"),
         ("play shape of you", "play_music"),

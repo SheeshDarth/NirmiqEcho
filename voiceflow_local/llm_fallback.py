@@ -82,6 +82,13 @@ brightness up
 brightness down
 calculate [expression]
 convert [value and units]
+who is [topic]
+what is [topic]
+tell me a joke
+remember [text]
+what do you remember
+cpu usage
+system status
 type [text]"""
 
 _SYSTEM = (
@@ -161,6 +168,41 @@ def map_to_command(text: str) -> str | None:
     if not line or line.upper() == "NONE" or len(line) > 200:
         return None
     return line
+
+
+def ask(question: str, max_sentences: int = 2) -> str | None:
+    """
+    Answer a general question with the LOCAL model, in a couple of spoken
+    sentences. Returns None if Ollama is unavailable or errors — callers then
+    fall back (e.g. to a web search). Fully offline; no cloud.
+    """
+    question = (question or "").strip()
+    if not question or not is_available():
+        return None
+    system = (f"You are Echo, a concise voice assistant. Answer the user's "
+              f"question in at most {max_sentences} short spoken sentences. "
+              f"Plain text only — no markdown, lists, or preamble. If unsure, "
+              f"say you're not sure.")
+    body = json.dumps({
+        "model": OLLAMA_MODEL,
+        "messages": [{"role": "system", "content": system},
+                     {"role": "user", "content": question}],
+        "stream": False, "think": False, "keep_alive": _KEEP_ALIVE,
+        "options": {"temperature": 0.2, "num_predict": 160},
+    }).encode("utf-8")
+    try:
+        req = urllib.request.Request(
+            OLLAMA_URL + "/api/chat", data=body,
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        out = (data.get("message", {}) or {}).get("content", "") or ""
+    except Exception as exc:
+        logger.debug("llm_fallback.ask failed: %s", exc)
+        return None
+    out = re.sub(r"<think>.*?</think>", "", out, flags=re.DOTALL | re.IGNORECASE)
+    out = out.strip().strip('"')
+    return out or None
 
 
 def prewarm() -> None:
