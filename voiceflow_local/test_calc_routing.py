@@ -8,7 +8,7 @@ cases = [
     ("what is 12 times 8", "calculate"),
     ("15 percent of 200", "calculate"),
     ("square root of 144", "calculate"),
-    ("what is the capital of France", "search_web"),
+    ("what is the capital of France", "answer_question"),  # spoken answer now
     ("what time is it", "tell_time"),
     ("search for python tutorials", "search_web"),
     ("open chrome", "open_app"),
