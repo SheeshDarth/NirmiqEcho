@@ -31,6 +31,25 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
 FALLBACK_ENABLED = os.getenv("LLM_FALLBACK", "1") != "0"
 
+
+def _is_local(url: str) -> bool:
+    """True if the Ollama endpoint is on this machine (no data leaves it)."""
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(url).hostname or "").lower()
+        return host in ("localhost", "127.0.0.1", "::1", "0.0.0.0", "")
+    except Exception:
+        return False
+
+
+# Privacy guard: NirmiqEcho is offline-first. If someone points OLLAMA_URL at a
+# remote host, voice transcripts would leave the machine — warn loudly once.
+if FALLBACK_ENABLED and not _is_local(OLLAMA_URL):
+    logger.warning(
+        "PRIVACY: OLLAMA_URL=%s is NOT local — voice transcripts will be sent "
+        "off this machine. Set OLLAMA_URL to http://localhost:11434 to stay "
+        "fully offline, or LLM_FALLBACK=0 to disable.", OLLAMA_URL)
+
 _REQUEST_TIMEOUT = 30.0     # tolerate a cold model load on the first call
 _HEALTH_TIMEOUT = 1.5
 _HEALTH_TTL = 30.0          # re-probe Ollama at most this often

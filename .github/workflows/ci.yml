@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Byte-compile every module (syntax check)
+        run: |
+          python -m compileall -q voiceflow_local
+          echo "All modules compile."
+
+      - name: Offline logic tests (no audio / OS deps)
+        run: |
+          cd voiceflow_local
+          python calculator.py
+          python units.py
+
+      - name: Guard — no shell=True / os.system / eval in the codebase
+        run: |
+          if grep -rnE "shell\s*=\s*True|os\.system\(|[^_.]eval\(|[^_.]exec\(" voiceflow_local --include=*.py; then
+            echo "::error::Unsafe shell/eval construct found"; exit 1
+          fi
+          echo "No unsafe shell/eval constructs."

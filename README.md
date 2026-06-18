@@ -5,6 +5,27 @@ opening apps, messaging on WhatsApp, playing music, finding files, doing math,
 controlling the system. Runs in your system tray. Your voice never leaves your
 machine.
 
+![CI](https://github.com/SheeshDarth/NirmiqEcho/actions/workflows/ci.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![Offline](https://img.shields.io/badge/cloud-none-success)
+![Platform](https://img.shields.io/badge/platform-Windows-0078D6)
+
+## Why it's different
+
+Most "build Jarvis in Python" projects are *either* brittle keyword-matching
+*or* a thin wrapper around a cloud LLM. NirmiqEcho is neither:
+
+- 🧠 **Hybrid intelligence, 100% offline** — instant offline pattern engine for
+  known commands **+** a *local* Ollama LLM fallback that understands free-form
+  phrasing, with graceful degradation when the LLM is off. No cloud, no API key.
+- 🔒 **Privacy by construction** — speech-to-text (faster-whisper) and TTS run
+  on-device; nothing is sent anywhere. See [SECURITY.md](SECURITY.md).
+- 🛡️ **Hardened OS automation** — no `shell=True`, whitelist-validated app names,
+  and destructive actions (shutdown / delete) require spoken confirmation.
+- 🎙️ **Production resilience** — self-healing mic (auto-unmute, dead-device
+  scan), GPU/CPU auto-selection with a fallback ladder, hallucination filtering.
+- ✅ **Tested & CI'd** — offline logic suites + a security guard run on every push.
+
 ## Run it
 
 ```
@@ -69,11 +90,17 @@ NirmiqEcho/
 
 ## Safety
 
-Voice-driven OS automation, hardened: voice-derived text never reaches a shell
-(`shell=True` is never used; app/process names are whitelist-validated),
-high-risk actions (file delete, etc.) confirm first, and the LLM fallback only
-*rewrites* into the same whitelisted commands — it never executes free-form
-output.
+Voice-driven OS automation, hardened (full threat model in [SECURITY.md](SECURITY.md)):
+
+- Voice-derived text **never reaches a shell** — no `shell=True`, no `eval`;
+  app/process names are whitelist-validated, protocol launches are allow-listed.
+- **Destructive actions require spoken confirmation** — `shutdown`, `restart`,
+  `sleep`, `empty recycle bin`, and file delete all ask "say yes to confirm"
+  first, so a misheard command can't halt or wipe the machine.
+- The **LLM fallback only *rewrites*** into the same whitelisted commands — it
+  never executes free-form model output.
+- **Offline by default** — a loud warning fires if `OLLAMA_URL` is pointed off
+  the machine. Every command is recorded to a local, gitignored audit log.
 
 ---
 *Part of the Nirmiq umbrella. Built by Siddharth.*

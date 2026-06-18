@@ -6,6 +6,7 @@
 *.m4a
 *.wav
 voiceflow_local/assets/accent_profile.json
+voiceflow_local/assets/command_log.txt
 # Remembered facts may be sensitive (codes, passwords) — never commit
 voiceflow_local/assets/memory.json
 

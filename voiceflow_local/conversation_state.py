@@ -213,6 +213,20 @@ class ConversationStateManager:
                     self._on_prompt("Okay, not deleted.")
                 return True
 
+        # ── Generic confirmation (destructive system actions) ────────
+        elif ctx.intent == "confirm_action" and ctx.state == State.AWAITING_CONFIRM:
+            yes = text.lower() in ("yes", "yeah", "yep", "confirm", "do it",
+                                   "go ahead", "sure", "proceed", "okay", "ok",
+                                   "affirmative", "yes please")
+            fn = ctx.on_complete
+            cancel_msg = ctx.data.get("_cancel_msg", "Okay, cancelled.")
+            self._ctx = ConversationContext()   # reset before acting
+            if yes and fn:
+                threading.Thread(target=fn, daemon=True).start()
+            else:
+                self._on_prompt(cancel_msg)
+            return True
+
         # ── Generic awaiting query ───────────────────────────────────
         elif ctx.state == State.AWAITING_QUERY:
             ctx.data["query"] = text

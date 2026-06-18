@@ -287,7 +287,8 @@ PATTERNS: list[tuple[re.Pattern, str]] = [
     (_p(r"^(?:restart|reboot)(?:\s+(?:computer|pc))?$"),    "restart"),
     (_p(r"^(?:brightness\s+up|increase\s+brightness)$"),    "brightness_up"),
     (_p(r"^(?:brightness\s+down|decrease\s+brightness)$"),  "brightness_down"),
-    (_p(r"^(?:empty|clear)\s+(?:recycle\s+bin|trash)$"),    "empty_recycle_bin"),
+    (_p(r"^(?:empty|clear)\s+(?:the\s+|my\s+)?(?:recycle\s+bin|trash|bin)$"),
+                                                             "empty_recycle_bin"),
     (_p(r"^(?:open\s+)?clipboard$"),                        "show_clipboard"),
 
     # ── Personality / help ───────────────────────────────────────────
@@ -492,6 +493,10 @@ class CommandProcessor:
         if a == "conversation_step":
             return
 
+        # Audit trail — every executed command is logged locally (accountability;
+        # never leaves the machine, gitignored).
+        self._audit(a, g)
+
         dispatch = {
             "open_app":           lambda: self._open_app(g.get("app_name", "")),
             "close_app":          lambda: self._close_app(g.get("app_name", "")),
@@ -570,19 +575,28 @@ class CommandProcessor:
             "open_settings":      lambda: os.startfile("ms-settings:"),
             "file_explorer":      lambda: self._open_app("explorer"),
             "task_manager":       lambda: self._open_app("taskmgr"),
+            # Lock is instant — non-destructive and instantly recoverable.
             "lock_screen":        lambda: subprocess.Popen(
                                       ["rundll32.exe", "user32.dll,LockWorkStation"],
                                       shell=False),
-            "sleep":              lambda: subprocess.Popen(
-                                      ["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"],
-                                      shell=False),
-            "shutdown":           lambda: subprocess.Popen(
-                                      ["shutdown", "/s", "/t", "30"], shell=False),
-            "restart":            lambda: subprocess.Popen(
-                                      ["shutdown", "/r", "/t", "30"], shell=False),
+            # Destructive / disruptive → require spoken confirmation so a
+            # misheard command can never sleep/restart/wipe the machine.
+            "sleep":              lambda: self._require_confirm(
+                                      self._do_sleep,
+                                      "Put the computer to sleep? Say yes to confirm."),
+            "shutdown":           lambda: self._require_confirm(
+                                      self._do_shutdown,
+                                      "Shut down the computer in 30 seconds? Say yes to confirm.",
+                                      cancel_msg="Shutdown cancelled."),
+            "restart":            lambda: self._require_confirm(
+                                      self._do_restart,
+                                      "Restart the computer in 30 seconds? Say yes to confirm.",
+                                      cancel_msg="Restart cancelled."),
             "brightness_up":      lambda: self._brightness(+10),
             "brightness_down":    lambda: self._brightness(-10),
-            "empty_recycle_bin":  lambda: self._empty_recycle_bin(),
+            "empty_recycle_bin":  lambda: self._require_confirm(
+                                      self._empty_recycle_bin,
+                                      "Permanently empty the recycle bin? Say yes to confirm."),
             "show_clipboard":     lambda: self._hotkey("win", "v"),
             "open_file":          lambda: self._voice_open_file(g.get("filename", "")),
             "open_folder":        lambda: self._voice_open_folder(g.get("folder", "")),
@@ -1671,6 +1685,62 @@ class CommandProcessor:
             self._tts_speak("Screenshot saved.")
         except Exception as exc:
             self._tts_speak(f"Screenshot failed.")
+
+    # ── Local audit trail ────────────────────────────────────────────
+    def _audit(self, action: str, args: dict) -> None:
+        """Append a timestamped record of every executed command. Local only,
+        gitignored — gives an accountability trail without phoning home."""
+        try:
+            import datetime
+            line = (f"{datetime.datetime.now().isoformat(timespec='seconds')}  "
+                    f"{action}  {args}\n")
+            log = Path(__file__).resolve().parent / "assets" / "command_log.txt"
+            log.parent.mkdir(parents=True, exist_ok=True)
+            # Trim if it grows past ~500 KB so it never balloons.
+            if log.exists() and log.stat().st_size > 512_000:
+                tail = log.read_text(encoding="utf-8", errors="ignore").splitlines()[-2000:]
+                log.write_text("\n".join(tail) + "\n", encoding="utf-8")
+            with open(log, "a", encoding="utf-8") as fh:
+                fh.write(line)
+        except Exception:
+            pass  # auditing must never break command execution
+
+    # ── Confirmation gate for destructive / disruptive actions ───────
+    def _require_confirm(self, action, prompt: str,
+                         cancel_msg: str = "Okay, cancelled.") -> None:
+        """
+        Speak `prompt` and wait for a spoken yes/no before running `action`.
+        Prevents a single misheard command from sleeping/restarting/wiping the
+        machine. Falls back to running directly only if no conversation state
+        is available (it always is in normal operation).
+        """
+        if self._conv:
+            from conversation_state import State
+            self._conv.begin_intent(
+                intent="confirm_action",
+                state=State.AWAITING_CONFIRM,
+                on_complete=action,
+                data={"_cancel_msg": cancel_msg},
+                prompt=prompt,
+            )
+        else:
+            action()
+
+    def _do_shutdown(self) -> None:
+        self._tts_speak("Shutting down in 30 seconds.")
+        subprocess.Popen(["shutdown", "/s", "/t", "30"], shell=False,
+                         creationflags=subprocess.CREATE_NO_WINDOW)
+
+    def _do_restart(self) -> None:
+        self._tts_speak("Restarting in 30 seconds.")
+        subprocess.Popen(["shutdown", "/r", "/t", "30"], shell=False,
+                         creationflags=subprocess.CREATE_NO_WINDOW)
+
+    def _do_sleep(self) -> None:
+        self._tts_speak("Going to sleep.")
+        subprocess.Popen(
+            ["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"],
+            shell=False, creationflags=subprocess.CREATE_NO_WINDOW)
 
     def _empty_recycle_bin(self) -> None:
         try:
