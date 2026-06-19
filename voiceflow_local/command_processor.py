@@ -317,6 +317,73 @@ MODE_ALIASES: dict[str, str] = {
 
 
 # ─────────────────────────────────────────────────────────────────────
+# User-defined commands (commands.yaml)
+# ─────────────────────────────────────────────────────────────────────
+# Config phrases may bind ONLY to these already-validated, non-destructive
+# actions. Destructive ones (shutdown/restart/sleep/delete/empty bin/close_app/
+# whatsapp send) are intentionally excluded — config supplies phrasings, never
+# new or dangerous behaviour. Each bound action still runs through the normal
+# dispatch + its own arg validation + confirmation gates.
+_CUSTOM_SAFE_ACTIONS = frozenset({
+    "open_app", "focus_app", "open_folder", "open_url", "search_web", "youtube",
+    "play_music", "play_spotify", "play_youtube_song", "play_local",
+    "force_type", "find_file", "list_folder", "take_note", "tell_time",
+    "tell_date", "tell_battery", "tell_cpu", "system_status", "answer_question",
+    "calculate", "tell_joke", "volume_up", "volume_down", "toggle_mute",
+    "set_volume", "scroll", "nav_back", "nav_forward", "new_tab", "screenshot",
+    "minimize_window", "maximize_window", "show_desktop", "lock_screen",
+    "open_whatsapp", "open_settings", "shuffle_music",
+})
+
+
+def load_custom_commands(path=None) -> list:
+    """
+    Load user-defined phrase→command bindings from commands.yaml.
+    Returns a list of (compiled_pattern, action, args) for SAFE actions only.
+    Never raises: missing file / missing PyYAML / bad entries are skipped.
+    Phrases are re.escape'd so config can't inject regex.
+    """
+    if path is None:
+        path = Path(__file__).resolve().parent.parent / "commands.yaml"
+    path = Path(path)
+    if not path.exists():
+        return []
+    try:
+        import yaml
+    except ImportError:
+        logger.info("custom commands: PyYAML not installed — skipping "
+                    "(pip install pyyaml to enable commands.yaml)")
+        return []
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        logger.warning("custom commands: could not parse %s: %s", path, exc)
+        return []
+
+    out = []
+    for entry in (data.get("commands") or []):
+        if not isinstance(entry, dict):
+            continue
+        phrase = str(entry.get("phrase", "")).strip()
+        action = str(entry.get("action", "")).strip()
+        args = entry.get("args") or {}
+        if not phrase or not action:
+            continue
+        if action not in _CUSTOM_SAFE_ACTIONS:
+            logger.warning("custom commands: refusing unsafe/unknown action "
+                           "%r for phrase %r", action, phrase)
+            continue
+        if not isinstance(args, dict):
+            logger.warning("custom commands: args for %r must be a mapping", phrase)
+            continue
+        pat = re.compile(r"^\s*" + re.escape(phrase) + r"\s*$", re.IGNORECASE)
+        out.append((pat, action, {str(k): v for k, v in args.items()}))
+    if out:
+        logger.info("custom commands: loaded %d from %s", len(out), path.name)
+    return out
+
+
+# ─────────────────────────────────────────────────────────────────────
 # CommandProcessor
 # ─────────────────────────────────────────────────────────────────────
 
@@ -350,6 +417,9 @@ class CommandProcessor:
         self._mode       = "default"
         self._timers: list[threading.Timer] = []
 
+        # User-defined phrase→command bindings (commands.yaml). Safe if absent.
+        self._custom_commands = load_custom_commands()
+
         # Lazy-load subsystems to keep startup fast
         self._discovery = None
         self._tts = None
@@ -359,7 +429,8 @@ class CommandProcessor:
         # Background: pre-warm app discovery cache
         threading.Thread(target=self._init_subsystems, daemon=True).start()
 
-        logger.info("CommandProcessor: ready (%d patterns)", len(PATTERNS))
+        logger.info("CommandProcessor: ready (%d patterns, %d custom)",
+                    len(PATTERNS), len(self._custom_commands))
 
     def _init_subsystems(self):
         """Initialize all subsystems in background thread."""
@@ -465,6 +536,15 @@ class CommandProcessor:
                 if result is not None:
                     logger.info("Command: %s | %r", action, arg)
                     return result
+
+        # 3. User-defined commands (commands.yaml) — built-ins win, then these
+        #    fill the gap. Each binds an exact phrase to an already-validated
+        #    SAFE action with fixed args; it executes through the same dispatch.
+        for pattern, action, cargs in self._custom_commands:
+            if pattern.match(cleaned):
+                logger.info("Custom command: %r -> %s", cleaned, action)
+                return CommandResult(True, action, dict(cargs), text,
+                                     feedback=f"{action.replace('_', ' ')}")
 
         # 5. Local-LLM fallback — map a novel phrasing to a known command and
         #    re-run the engine on it. Only in default (command) mode, only when

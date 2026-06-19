@@ -22,11 +22,13 @@ jobs:
           python -m compileall -q voiceflow_local
           echo "All modules compile."
 
-      - name: Offline logic tests (no audio / OS deps)
+      - name: Offline logic + security tests (no audio / OS deps)
         run: |
+          pip install pyyaml --quiet
           cd voiceflow_local
           python calculator.py
           python units.py
+          python test_custom_commands.py
 
       - name: Guard — no shell=True / os.system / eval in the codebase
         run: |

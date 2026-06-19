@@ -10,6 +10,12 @@ machine.
 ![Offline](https://img.shields.io/badge/cloud-none-success)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6)
 
+<!-- DEMO: record a 15–20s clip (e.g. ScreenToGif / OBS) of a few neutral
+     commands — "open calculator", "what is 12 times 8", "tell me a joke" —
+     save it as docs/demo.gif, then uncomment the next line:
+![NirmiqEcho demo](docs/demo.gif)
+-->
+
 ## Why it's different
 
 Most "build Jarvis in Python" projects are *either* brittle keyword-matching
@@ -58,6 +64,39 @@ Two layers, so it's both **instant** and **flexible**:
 
 To enable the fallback: install [Ollama](https://ollama.com), `ollama pull
 qwen3.5:4b`, and keep it running. Configure in `.env` (see `.env.example`).
+
+```mermaid
+flowchart LR
+    M[🎤 Mic] --> V[VAD + noise reduction]
+    V --> W[faster-whisper<br/>GPU large-v3 / CPU small.en]
+    W --> P{Command engine}
+    P -->|exact match| R[Regex / math / units<br/>~instant]
+    P -->|no match| C[commands.yaml<br/>your custom phrases]
+    P -->|still no match| L[Local Ollama<br/>rewrite → known command]
+    R --> X[Validate → confirm if risky → execute]
+    C --> X
+    L --> X
+    X --> T[🔊 Spoken reply]
+```
+
+## Add your own commands
+
+Drop a `commands.yaml` next to `start.bat` (copy `commands.example.yaml`) and map
+any spoken phrase to a built-in action — no code, fully offline:
+
+```yaml
+commands:
+  - phrase: "fire up my editor"
+    action: open_app
+    args: { app_name: code }
+  - phrase: "focus mode"
+    action: play_spotify
+    args: { query: lofi focus beats }
+```
+
+For safety, phrases can only bind to **non-destructive** actions (open / play /
+search / type / info) — never shutdown, delete, or message-send — and each one
+still runs through the same validation as a built-in command.
 
 ## Accuracy & mic
 

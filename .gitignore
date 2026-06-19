@@ -9,6 +9,8 @@ voiceflow_local/assets/accent_profile.json
 voiceflow_local/assets/command_log.txt
 # Remembered facts may be sensitive (codes, passwords) — never commit
 voiceflow_local/assets/memory.json
+# A user's personal custom commands stay local (commands.example.yaml is the template)
+commands.yaml
 
 # Whisper models (several GB — re-downloaded / reused automatically)
 models/

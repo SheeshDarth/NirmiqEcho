@@ -1,0 +1,36 @@
+# NirmiqEcho — your own voice commands.
+# Copy this file to  commands.yaml  (same folder) and edit. NirmiqEcho loads it
+# at startup. Each entry maps an exact spoken phrase to one built-in action with
+# fixed arguments — no code needed, 100% offline.
+#
+# For SAFETY, a phrase can only bind to a non-destructive built-in action
+# (open/play/search/type/info/volume/etc.). Destructive actions (shutdown,
+# delete, empty bin, sending messages) are intentionally NOT bindable here, and
+# any action you name still runs through its normal validation.
+#
+# Find action + arg names in voiceflow_local/command_processor.py (_CUSTOM_SAFE_ACTIONS).
+
+commands:
+  - phrase: "fire up my editor"
+    action: open_app
+    args: { app_name: code }
+
+  - phrase: "open my work folder"
+    action: open_folder
+    args: { folder: documents }
+
+  - phrase: "focus mode"
+    action: play_spotify
+    args: { query: lofi focus beats }
+
+  - phrase: "what's the latest in ai"
+    action: search_web
+    args: { query: latest AI news }
+
+  - phrase: "sign my emails"
+    action: force_type
+    args: { text: "Best regards,\nSiddharth" }
+
+  - phrase: "how hot is my pc"
+    action: tell_cpu
+    args: {}

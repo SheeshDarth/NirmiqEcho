@@ -16,6 +16,7 @@ psutil>=5.9.0           # RAM detection + battery info
 # ── Jarvis Upgrade additions ─────────────────────────────────────────
 pyttsx3>=2.90           # TTS voice engine (Windows SAPI — zero download, fully offline)
 send2trash>=1.8.0       # Safe file deletion to Recycle Bin
+PyYAML>=6.0             # optional: load user-defined commands.yaml
 pygetwindow>=0.0.9      # Window focus / bring-to-front management
 
 # System tray (optional — graceful fallback if not installed)
