@@ -415,6 +415,7 @@ class CommandProcessor:
 
         self._last_typed = ""
         self._mode       = "default"
+        self._recent     = ""   # last recognised request, for follow-up context
         self._timers: list[threading.Timer] = []
 
         # User-defined phrase→command bindings (commands.yaml). Safe if absent.
@@ -552,7 +553,7 @@ class CommandProcessor:
         if _allow_fallback and self._mode == "default":
             try:
                 import llm_fallback
-                mapped = llm_fallback.map_to_command(cleaned)
+                mapped = llm_fallback.map_to_command(cleaned, context=self._recent)
             except Exception as exc:
                 logger.debug("llm_fallback error: %s", exc)
                 mapped = None
@@ -576,6 +577,13 @@ class CommandProcessor:
         # Audit trail — every executed command is logged locally (accountability;
         # never leaves the machine, gitignored).
         self._audit(a, g)
+
+        # Remember this request so the NEXT utterance's LLM fallback can resolve
+        # follow-up pronouns ("how tall is it"). Topic-bearing actions only.
+        if a in ("answer_question", "search_web", "open_app", "focus_app",
+                 "play_music", "play_spotify", "play_youtube_song", "youtube",
+                 "open_url", "find_file", "open_folder"):
+            self._recent = (result.raw_text or "").strip()
 
         dispatch = {
             "open_app":           lambda: self._open_app(g.get("app_name", "")),

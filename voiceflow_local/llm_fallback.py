@@ -143,10 +143,14 @@ def is_available() -> bool:
     return _available
 
 
-def map_to_command(text: str) -> str | None:
+def map_to_command(text: str, context: str = "") -> str | None:
     """
     Rewrite a novel phrasing as a canonical command, or return None when the
     fallback is unavailable / the request isn't a command / it's too long.
+
+    `context` is the previous request (if any). It lets follow-ups resolve
+    pronouns — e.g. after "what is the Eiffel Tower", "how tall is it" becomes
+    "what is the height of the Eiffel Tower".
     """
     text = (text or "").strip()
     if not text or len(text.split()) > _MAX_WORDS:
@@ -154,11 +158,17 @@ def map_to_command(text: str) -> str | None:
     if not is_available():
         return None
 
+    user_msg = text
+    if context:
+        user_msg = (f"Previous request: {context}\nNow: {text}\n"
+                    f"Resolve any pronouns (it, that, there, this) using the "
+                    f"previous request, then output the single command.")
+
     body = json.dumps({
         "model": OLLAMA_MODEL,
         "messages": [
             {"role": "system", "content": _SYSTEM},
-            {"role": "user", "content": text},
+            {"role": "user", "content": user_msg},
         ],
         "stream": False,
         "think": False,             # skip chain-of-thought (qwen3.5 etc.) — fast

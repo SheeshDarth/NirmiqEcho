@@ -60,7 +60,8 @@ Two layers, so it's both **instant** and **flexible**:
    recognise ("fire up my browser", "I wanna hear some lofi"), Echo asks a
    **local Ollama model** to map it to a known command. Fully offline (localhost,
    no API key). If Ollama isn't running, this is skipped instantly and Echo keeps
-   working with the built-in commands.
+   working with the built-in commands. It also carries **one turn of context**,
+   so follow-ups resolve — "what is the Eiffel Tower" → "how tall is it".
 
 To enable the fallback: install [Ollama](https://ollama.com), `ollama pull
 qwen3.5:4b`, and keep it running. Configure in `.env` (see `.env.example`).
