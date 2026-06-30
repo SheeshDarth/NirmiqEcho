@@ -1,0 +1,28 @@
+# NirmiqEcho — packaging & tooling config.
+# Runtime dependencies live in voiceflow_local/requirements.txt (Windows-specific
+# pins). This file exists to give pytest and ruff a stable, cwd-independent home;
+# the app runs as a script collection (start.bat -> voiceflow_local/main.py), so it
+# is intentionally not built or installed as a wheel.
+
+[project]
+name = "nirmiqecho"
+version = "0.1.0"
+description = "Local-first, offline JARVIS-style voice assistant for Windows (system tray)."
+readme = "README.md"
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "PyYAML>=6", "ruff>=0.5"]
+
+[tool.pytest.ini_options]
+testpaths = ["voiceflow_local/tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["docs/archive", ".venv", "models"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]  # long comment / table lines are fine in this codebase
