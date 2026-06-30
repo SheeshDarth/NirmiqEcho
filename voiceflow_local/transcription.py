@@ -110,7 +110,7 @@ class TranscriptionEngine:
         self.device, self.compute_type = _detect_compute_device()
 
         # Model selection — benchmarked 2026-06-10 on the user's real voice
-        # samples (see test_accuracy.py):
+        # samples (see tests/manual/test_accuracy.py):
         #   GPU large-v3 : 99.5% acc, RTF 0.23x (1-2s commands)    ← GPU default
         #   CPU small.en : 97% acc, RTF 0.36x (1-2s commands), 500MB ← CPU default
         #   CPU medium.en: 99% acc, RTF 0.95x (3-5s commands), 1.5GB
