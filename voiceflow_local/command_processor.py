@@ -105,6 +105,25 @@ _SAFE_TOKEN_RE = re.compile(r"^[\w.+\- ()]+$")
 _SAFE_PROC_RE  = re.compile(r"^[\w.+\- ()]+\.exe$", re.IGNORECASE)
 
 
+def _safe_int(value, default: int, lo: int | None = None, hi: int | None = None) -> int:
+    """Coerce voice-derived text to an int, defaulting on failure and clamping.
+
+    A misheard number ("set volume to loud") degrades to a sensible default
+    instead of raising inside command dispatch. Digits are also recovered from
+    surrounding words ("about 30 percent" -> 30) as a fallback.
+    """
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        m = re.search(r"-?\d+", str(value or ""))
+        n = int(m.group()) if m else default
+    if lo is not None:
+        n = max(lo, n)
+    if hi is not None:
+        n = min(hi, n)
+    return n
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Command patterns  (order = priority)
 # ─────────────────────────────────────────────────────────────────────
@@ -600,7 +619,7 @@ class CommandProcessor:
             "volume_up":          lambda: self._volume_change(+2),
             "volume_down":        lambda: self._volume_change(-2),
             "toggle_mute":        lambda: self._media_key("volumemute"),
-            "set_volume":         lambda: self._set_volume(int(g.get("level", 50))),
+            "set_volume":         lambda: self._set_volume(_safe_int(g.get("level"), 50, 0, 100)),
             "shuffle_music":      lambda: self._shuffle_music(),
             "search_web":         lambda: self._search_web(g.get("query", "")),
             "open_url":           lambda: self._open_url(g.get("url", "")),
@@ -621,7 +640,7 @@ class CommandProcessor:
             "remember":           lambda: self._remember(g.get("text", "")),
             "recall":             lambda: self._recall(),
             "forget_all":         lambda: self._forget_all(),
-            "set_timer":          lambda: self._set_timer(int(g.get("amount", 1)),
+            "set_timer":          lambda: self._set_timer(_safe_int(g.get("amount"), 1, 1),
                                                            g.get("unit", "min")),
             "cancel_timer":       lambda: self._cancel_timers(),
             "cancel_intent":      lambda: self._cancel_intent(),
@@ -632,7 +651,7 @@ class CommandProcessor:
             "close_tab":          lambda: self._hotkey("ctrl", "w"),
             "next_tab":           lambda: self._hotkey("ctrl", "tab"),
             "scroll":             lambda: self._scroll(g.get("direction", "down"),
-                                                       int(g.get("amount", 3))),
+                                                       _safe_int(g.get("amount"), 3, 1)),
             "scroll_top":         lambda: self._hotkey("ctrl", "home"),
             "scroll_bottom":      lambda: self._hotkey("ctrl", "end"),
             "switch_window":      lambda: self._hotkey("alt", "tab"),
@@ -711,7 +730,7 @@ class CommandProcessor:
                 logger.warning("Unknown action: %s", a)
         except Exception as exc:
             logger.error("Execute error [%s]: %s", a, exc, exc_info=True)
-            self._tts_speak(f"Command failed.")
+            self._tts_speak("Command failed.")
 
     def record_typed(self, text: str) -> None:
         self._last_typed = text
@@ -1772,7 +1791,8 @@ class CommandProcessor:
             pyautogui.hotkey("win", "printscreen")
             self._tts_speak("Screenshot saved.")
         except Exception as exc:
-            self._tts_speak(f"Screenshot failed.")
+            logger.warning("Screenshot failed: %s", exc)
+            self._tts_speak("Screenshot failed.")
 
     # ── Local audit trail ────────────────────────────────────────────
     def _audit(self, action: str, args: dict) -> None:

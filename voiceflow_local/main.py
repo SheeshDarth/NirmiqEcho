@@ -84,6 +84,10 @@ class NirmiqEchoApp:
         self.ui = None
 
         self._hotkeys = HotkeyManager()
+        # Guards listening-state transitions — start/stop are reached from the
+        # hotkey, wake-word, and UI threads. RLock so a same-thread re-entry
+        # (e.g. a failed start resuming the detector) can't self-deadlock.
+        self._listen_lock = threading.RLock()
         self._listening = False
         self._echo_mode = False      # wake word mode on/off
         # Plug-and-play: start listening the moment the model is ready, so the
@@ -280,42 +284,44 @@ class NirmiqEchoApp:
     # ------------------------------------------------------------------
 
     def start_listening(self) -> None:
-        if self._listening:
-            return
-        if not self.transcription_engine.is_ready:
-            return
-        try:
-            # Pause wake word detector while we're actively recording
-            if self.wake_word_detector and self.wake_word_detector.is_ready:
-                self.wake_word_detector.pause()
+        with self._listen_lock:
+            if self._listening:
+                return
+            if not self.transcription_engine.is_ready:
+                return
+            try:
+                # Pause wake word detector while we're actively recording
+                if self.wake_word_detector and self.wake_word_detector.is_ready:
+                    self.wake_word_detector.pause()
 
-            self.audio_handler.start()
-            self._listening = True
-            self.ui.schedule("set_listening", True)
-            logger.info("Listening started")
-        except RuntimeError as exc:
-            logger.error("Could not start listening: %s", exc)
-            self.ui.schedule("show_error", str(exc))
-            # Resume wake detector since we failed to start
-            if self.wake_word_detector and self.wake_word_detector.is_ready:
-                self.wake_word_detector.resume()
+                self.audio_handler.start()
+                self._listening = True
+                self.ui.schedule("set_listening", True)
+                logger.info("Listening started")
+            except RuntimeError as exc:
+                logger.error("Could not start listening: %s", exc)
+                self.ui.schedule("show_error", str(exc))
+                # Resume wake detector since we failed to start
+                if self.wake_word_detector and self.wake_word_detector.is_ready:
+                    self.wake_word_detector.resume()
 
     def stop_listening(self) -> None:
-        if not self._listening:
-            return
-        self.audio_handler.stop()
-        self._listening = False
-        self.ui.schedule("set_listening", False)
+        with self._listen_lock:
+            if not self._listening:
+                return
+            self.audio_handler.stop()
+            self._listening = False
+            self.ui.schedule("set_listening", False)
 
-        # Return to standby or ready depending on echo mode
-        if self._echo_mode and self.wake_word_detector and \
-                self.wake_word_detector.is_ready:
-            self.wake_word_detector.resume()
-            self.ui.schedule("set_status", "standby")
-        else:
-            self.ui.schedule("set_status", "ready")
+            # Return to standby or ready depending on echo mode
+            if self._echo_mode and self.wake_word_detector and \
+                    self.wake_word_detector.is_ready:
+                self.wake_word_detector.resume()
+                self.ui.schedule("set_status", "standby")
+            else:
+                self.ui.schedule("set_status", "ready")
 
-        logger.info("Listening stopped")
+            logger.info("Listening stopped")
 
     def _toggle(self) -> None:
         """Toggle listening — called by F9 from any thread."""
