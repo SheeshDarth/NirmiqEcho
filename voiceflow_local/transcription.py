@@ -108,6 +108,12 @@ class TranscriptionEngine:
         self._model_lock = threading.Lock()
 
         self.device, self.compute_type = _detect_compute_device()
+        # Quantization override: WHISPER_COMPUTE lets a user trade accuracy for a
+        # lighter footprint (int8 ~ half the RAM). Default (auto) = int8 on CPU,
+        # float16 on GPU; the load ladder still falls back if a type is unsupported.
+        _compute = os.getenv("WHISPER_COMPUTE", "").strip().lower()
+        if _compute in ("int8", "int8_float16", "int8_bfloat16", "float16", "float32"):
+            self.compute_type = _compute
 
         # Model selection — benchmarked 2026-06-10 on the user's real voice
         # samples (see tests/manual/test_accuracy.py):
