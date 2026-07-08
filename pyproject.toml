@@ -21,8 +21,10 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["docs/archive", ".venv", "models"]
+extend-exclude = ["docs/archive", ".venv", "models", "voiceflow_local/tests/manual"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+# E + F only — real errors (syntax, unused / undefined names). Import-sort (I) is
+# skipped on purpose: this codebase uses intentional in-function lazy imports.
+select = ["E", "F"]
 ignore = ["E501"]  # long comment / table lines are fine in this codebase

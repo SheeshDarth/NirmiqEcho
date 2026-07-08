@@ -22,7 +22,7 @@ import threading
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Any
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 

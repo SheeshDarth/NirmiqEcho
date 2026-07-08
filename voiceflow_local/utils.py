@@ -10,10 +10,8 @@ Provides:
 import logging
 import sys
 import os
-import datetime
 import platform
 import threading
-from pathlib import Path
 
 
 # ------------------------------------------------------------------

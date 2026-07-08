@@ -34,7 +34,7 @@ import threading
 import time
 import datetime
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Callable
 from urllib.parse import quote_plus
 from pathlib import Path
 
@@ -789,7 +789,7 @@ class CommandProcessor:
 
         elif action == "answer_question":
             return CommandResult(True, action, {"query": arg},
-                                 raw, feedback=f"Looking that up...")
+                                 raw, feedback="Looking that up...")
 
         elif action == "remember":
             return CommandResult(True, action, {"text": arg},
@@ -998,8 +998,7 @@ class CommandProcessor:
         Try to focus an already-running app window.
         Returns True if we successfully focused it.
         """
-        from app_discovery import get_discovery, PROCESS_ALIASES
-        import difflib
+        from app_discovery import get_discovery
 
         disc = self._discovery or get_discovery()
         proc_name = disc.find_process(name)
@@ -1330,7 +1329,8 @@ class CommandProcessor:
 
     def _whatsapp_paste(self, text: str) -> None:
         """Clipboard paste — Unicode-safe and fast (typewrite drops chars)."""
-        import pyautogui, pyperclip
+        import pyautogui
+        import pyperclip
         pyperclip.copy(text)
         time.sleep(0.05)
         pyautogui.hotkey("ctrl", "v")
@@ -1935,7 +1935,8 @@ class CommandProcessor:
 
     def _type_text(self, text: str) -> None:
         try:
-            import pyperclip, pyautogui
+            import pyperclip
+            import pyautogui
             pyperclip.copy(text)
             pyautogui.hotkey("ctrl", "v")
         except Exception as exc:

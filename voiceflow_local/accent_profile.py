@@ -15,10 +15,8 @@ Profile is saved to assets/accent_profile.json and reloaded on startup
 
 import json
 import logging
-import os
 import time
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 

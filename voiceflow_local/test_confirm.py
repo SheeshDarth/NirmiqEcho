@@ -13,7 +13,7 @@ def main():
         cp.execute(r)                      # should ARM confirmation, NOT act
         armed = cp._conv is not None and not cp._conv.is_idle
         # cancel it so the next case starts clean and nothing executes
-        cancelled = cp.process("cancel")
+        cp.process("cancel")
         ok = r.is_command and armed
         fails += not ok
         print(f"  [{'PASS' if ok else 'FAIL'}] {cmd!r:24} -> command={r.is_command} "

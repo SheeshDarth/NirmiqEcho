@@ -53,8 +53,10 @@ git ls-files | findstr /I ".m4a .env accent_profile.json models"   # must be emp
 ## D. Ship to another Windows machine
 
 1. Copy the folder (or `git clone` once pushed). `models/` is gitignored, so on
-   a clone the Whisper model auto-downloads on first launch (~1.5 GB for
-   small.en on CPU; large-v3 only if a CUDA GPU is present).
+   a clone the Whisper model auto-downloads on first launch. Footprint tiers:
+   **small.en int8 ≈ 0.5 GB** (CPU default, snappy) · large-v3 ≈ 3 GB (accuracy,
+   needs a CUDA GPU). Set `WHISPER_COMPUTE=int8` in `.env` to force the lighter,
+   ~half-RAM path on any machine; `WHISPER_MODEL=small.en` to pin the model.
 2. Install Python 3.11+ and run `start.bat`.
 3. (Optional) install Ollama + `ollama pull qwen3.5:4b` for the LLM fallback.
 

@@ -27,6 +27,11 @@ jobs:
           pip install pytest pyyaml --quiet
           pytest
 
+      - name: Lint (ruff)
+        run: |
+          pip install ruff --quiet
+          ruff check .
+
       - name: Guard — no shell=True / os.system / eval in the codebase
         run: |
           if grep -rnE "shell\s*=\s*True|os\.system\(|[^_.]eval\(|[^_.]exec\(" voiceflow_local --include=*.py; then
