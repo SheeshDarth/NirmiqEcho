@@ -24,3 +24,17 @@ def test_safe_int_extracts_embedded_digits():
 def test_safe_int_clamps_range():
     assert _safe_int("200", 50, 0, 100) == 100   # clamp to hi
     assert _safe_int("-5", 3, 1) == 1            # clamp to lo
+
+
+def test_launch_executable_rejects_dangerous_uri_schemes():
+    """F4: voice-derived text can never launch script / local-file URI handlers.
+
+    The reject path raises before any launch, so this is side-effect-free and
+    cross-platform (no CommandProcessor construction, no OS calls).
+    """
+    import pytest
+    from command_processor import CommandProcessor
+    for uri in ("javascript:alert(1)", "file:///etc/passwd",
+                "vbscript:x", "data:text/html,x", "chrome://settings"):
+        with pytest.raises(ValueError):
+            CommandProcessor._launch_executable(uri)

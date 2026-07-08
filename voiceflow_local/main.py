@@ -90,6 +90,7 @@ class NirmiqEchoApp:
         self._listen_lock = threading.RLock()
         self._listening = False
         self._echo_mode = False      # wake word mode on/off
+        self._status_restore_timer = None   # single cancel-and-replace restore timer
         # Plug-and-play: start listening the moment the model is ready, so the
         # user never has to press F9 first. Override with AUTORUN=0 in .env.
         self._autorun = os.getenv("AUTORUN", "1") != "0"
@@ -441,22 +442,31 @@ class NirmiqEchoApp:
             self.ui.schedule("append_transcript", cleaned)
 
     def _on_command_feedback(self, msg: str) -> None:
-        """Show brief command execution feedback in the UI status bar."""
-        if self.ui:
-            self.ui.schedule("set_status_text", msg)
-            # Restore the real status after 2 seconds
-            import threading
-            def _restore():
-                import time
-                time.sleep(2)
-                if self.ui:
-                    if self._listening:
-                        self.ui.schedule("set_status", "listening")
-                    elif self._echo_mode:
-                        self.ui.schedule("set_status", "standby")
-                    else:
-                        self.ui.schedule("set_status", "ready")
-            threading.Thread(target=_restore, daemon=True).start()
+        """Flash brief command feedback in the status bar, then restore status.
+
+        A single cancel-and-replace Timer replaces the old per-command
+        thread+sleep(2): rapid commands no longer pile up sleeping threads, and
+        an earlier restore can't clobber a later one.
+        """
+        if not self.ui:
+            return
+        self.ui.schedule("set_status_text", msg)
+        if self._status_restore_timer is not None:
+            self._status_restore_timer.cancel()
+        self._status_restore_timer = threading.Timer(2.0, self._restore_status)
+        self._status_restore_timer.daemon = True
+        self._status_restore_timer.start()
+
+    def _restore_status(self) -> None:
+        """Restore the status bar to its resting state after a feedback flash."""
+        if not self.ui:
+            return
+        if self._listening:
+            self.ui.schedule("set_status", "listening")
+        elif self._echo_mode:
+            self.ui.schedule("set_status", "standby")
+        else:
+            self.ui.schedule("set_status", "ready")
 
     # ------------------------------------------------------------------
     # Shutdown

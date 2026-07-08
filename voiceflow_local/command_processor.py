@@ -104,6 +104,14 @@ _JOKES = [
 _SAFE_TOKEN_RE = re.compile(r"^[\w.+\- ()]+$")
 _SAFE_PROC_RE  = re.compile(r"^[\w.+\- ()]+\.exe$", re.IGNORECASE)
 
+# URI schemes that must never be launched from voice-derived text — they can run
+# script or open arbitrary local content. Everything else (spotify:, ms-settings:,
+# mailto:, app protocols surfaced by discovery) is allowed through.
+_UNSAFE_URI_SCHEMES = frozenset({
+    "javascript", "vbscript", "data", "file", "about", "res", "shell",
+    "chrome", "search-ms", "help", "hcp",
+})
+
 
 def _safe_int(value, default: int, lo: int | None = None, hi: int | None = None) -> int:
     """Coerce voice-derived text to an int, defaulting on failure and clamping.
@@ -599,6 +607,8 @@ class CommandProcessor:
 
         # Remember this request so the NEXT utterance's LLM fallback can resolve
         # follow-up pronouns ("how tall is it"). Topic-bearing actions only.
+        # (Single string ref — this write and the read in process() are atomic
+        # under the GIL, so no lock is needed; a follow-up just sees the latest.)
         if a in ("answer_question", "search_web", "open_app", "focus_app",
                  "play_music", "play_spotify", "play_youtube_song", "youtube",
                  "open_url", "find_file", "open_folder"):
@@ -914,9 +924,14 @@ class CommandProcessor:
         if exe.startswith("http"):
             webbrowser.open(exe)
             return
-        # Protocol handlers: ms-settings:, spotify:, outlookcal:, … —
-        # a URI scheme, not a drive letter ("C:\...")
-        if re.match(r"^[A-Za-z][\w+.-]+:", exe) and not re.match(r"^[A-Za-z]:[\\/]", exe):
+        # Protocol handlers: spotify:, ms-settings:, mailto:, … — a URI scheme,
+        # not a drive letter ("C:\..."). Block script / local-file schemes so a
+        # crafted string can't launch a dangerous handler; allow the rest (app
+        # protocols come from trusted registry / Start-Menu discovery).
+        scheme_m = re.match(r"^([A-Za-z][\w+.-]+):", exe)
+        if scheme_m and not re.match(r"^[A-Za-z]:[\\/]", exe):
+            if scheme_m.group(1).lower() in _UNSAFE_URI_SCHEMES:
+                raise ValueError(f"unsafe URI scheme rejected: {exe!r}")
             os.startfile(exe)
             return
         if exe.lower().endswith(".lnk") or os.path.isfile(exe):
@@ -1810,8 +1825,8 @@ class CommandProcessor:
                 log.write_text("\n".join(tail) + "\n", encoding="utf-8")
             with open(log, "a", encoding="utf-8") as fh:
                 fh.write(line)
-        except Exception:
-            pass  # auditing must never break command execution
+        except Exception as exc:
+            logger.debug("audit write skipped: %s", exc)  # never break execution
 
     # ── Confirmation gate for destructive / disruptive actions ───────
     def _require_confirm(self, action, prompt: str,
