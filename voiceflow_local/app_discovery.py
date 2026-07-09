@@ -14,13 +14,10 @@ Results are cached after first scan for instant subsequent lookups.
 """
 
 import os
-import re
-import glob
 import winreg
 import logging
 import difflib
 from pathlib import Path
-from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +276,7 @@ class AppDiscovery:
                             with winreg.OpenKey(key, sub_name) as sub:
                                 try:
                                     display_name = winreg.QueryValueEx(sub, "DisplayName")[0]
-                                    install_loc = self._get_registry_value(
+                                    self._get_registry_value(
                                         sub, "InstallLocation", "")
                                     exe_str = self._get_registry_value(
                                         sub, "DisplayIcon", "")

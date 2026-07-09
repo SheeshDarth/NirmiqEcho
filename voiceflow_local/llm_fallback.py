@@ -192,7 +192,7 @@ def map_to_command(text: str, context: str = "") -> str | None:
     # Strip any chain-of-thought blocks some models emit, then take the
     # first meaningful line.
     out = re.sub(r"<think>.*?</think>", "", out, flags=re.DOTALL | re.IGNORECASE)
-    line = next((l.strip() for l in out.splitlines() if l.strip()), "")
+    line = next((ln.strip() for ln in out.splitlines() if ln.strip()), "")
     line = line.strip().strip('"').strip("`").rstrip(".!?")
     if not line or line.upper() == "NONE" or len(line) > 200:
         return None

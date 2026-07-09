@@ -24,11 +24,13 @@ jobs:
 
       - name: Offline logic + security tests (no audio / OS deps)
         run: |
-          pip install pyyaml --quiet
-          cd voiceflow_local
-          python calculator.py
-          python units.py
-          python test_custom_commands.py
+          pip install pytest pyyaml --quiet
+          pytest
+
+      - name: Lint (ruff)
+        run: |
+          pip install ruff --quiet
+          ruff check .
 
       - name: Guard — no shell=True / os.system / eval in the codebase
         run: |

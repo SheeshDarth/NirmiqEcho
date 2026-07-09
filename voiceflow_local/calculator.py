@@ -16,7 +16,6 @@ Handles, e.g.:
     "(3 plus 4) times 5"           -> 35
 """
 import ast
-import math
 import operator
 import re
 from typing import Optional, Tuple

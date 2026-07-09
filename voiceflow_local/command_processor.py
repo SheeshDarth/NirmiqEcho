@@ -34,7 +34,7 @@ import threading
 import time
 import datetime
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Callable
 from urllib.parse import quote_plus
 from pathlib import Path
 
@@ -103,6 +103,33 @@ _JOKES = [
 # voice-controlled assistant. Allow only benign name characters.
 _SAFE_TOKEN_RE = re.compile(r"^[\w.+\- ()]+$")
 _SAFE_PROC_RE  = re.compile(r"^[\w.+\- ()]+\.exe$", re.IGNORECASE)
+
+# URI schemes that must never be launched from voice-derived text — they can run
+# script or open arbitrary local content. Everything else (spotify:, ms-settings:,
+# mailto:, app protocols surfaced by discovery) is allowed through.
+_UNSAFE_URI_SCHEMES = frozenset({
+    "javascript", "vbscript", "data", "file", "about", "res", "shell",
+    "chrome", "search-ms", "help", "hcp",
+})
+
+
+def _safe_int(value, default: int, lo: int | None = None, hi: int | None = None) -> int:
+    """Coerce voice-derived text to an int, defaulting on failure and clamping.
+
+    A misheard number ("set volume to loud") degrades to a sensible default
+    instead of raising inside command dispatch. Digits are also recovered from
+    surrounding words ("about 30 percent" -> 30) as a fallback.
+    """
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        m = re.search(r"-?\d+", str(value or ""))
+        n = int(m.group()) if m else default
+    if lo is not None:
+        n = max(lo, n)
+    if hi is not None:
+        n = min(hi, n)
+    return n
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -580,6 +607,8 @@ class CommandProcessor:
 
         # Remember this request so the NEXT utterance's LLM fallback can resolve
         # follow-up pronouns ("how tall is it"). Topic-bearing actions only.
+        # (Single string ref — this write and the read in process() are atomic
+        # under the GIL, so no lock is needed; a follow-up just sees the latest.)
         if a in ("answer_question", "search_web", "open_app", "focus_app",
                  "play_music", "play_spotify", "play_youtube_song", "youtube",
                  "open_url", "find_file", "open_folder"):
@@ -600,7 +629,7 @@ class CommandProcessor:
             "volume_up":          lambda: self._volume_change(+2),
             "volume_down":        lambda: self._volume_change(-2),
             "toggle_mute":        lambda: self._media_key("volumemute"),
-            "set_volume":         lambda: self._set_volume(int(g.get("level", 50))),
+            "set_volume":         lambda: self._set_volume(_safe_int(g.get("level"), 50, 0, 100)),
             "shuffle_music":      lambda: self._shuffle_music(),
             "search_web":         lambda: self._search_web(g.get("query", "")),
             "open_url":           lambda: self._open_url(g.get("url", "")),
@@ -621,7 +650,7 @@ class CommandProcessor:
             "remember":           lambda: self._remember(g.get("text", "")),
             "recall":             lambda: self._recall(),
             "forget_all":         lambda: self._forget_all(),
-            "set_timer":          lambda: self._set_timer(int(g.get("amount", 1)),
+            "set_timer":          lambda: self._set_timer(_safe_int(g.get("amount"), 1, 1),
                                                            g.get("unit", "min")),
             "cancel_timer":       lambda: self._cancel_timers(),
             "cancel_intent":      lambda: self._cancel_intent(),
@@ -632,7 +661,7 @@ class CommandProcessor:
             "close_tab":          lambda: self._hotkey("ctrl", "w"),
             "next_tab":           lambda: self._hotkey("ctrl", "tab"),
             "scroll":             lambda: self._scroll(g.get("direction", "down"),
-                                                       int(g.get("amount", 3))),
+                                                       _safe_int(g.get("amount"), 3, 1)),
             "scroll_top":         lambda: self._hotkey("ctrl", "home"),
             "scroll_bottom":      lambda: self._hotkey("ctrl", "end"),
             "switch_window":      lambda: self._hotkey("alt", "tab"),
@@ -711,7 +740,7 @@ class CommandProcessor:
                 logger.warning("Unknown action: %s", a)
         except Exception as exc:
             logger.error("Execute error [%s]: %s", a, exc, exc_info=True)
-            self._tts_speak(f"Command failed.")
+            self._tts_speak("Command failed.")
 
     def record_typed(self, text: str) -> None:
         self._last_typed = text
@@ -760,7 +789,7 @@ class CommandProcessor:
 
         elif action == "answer_question":
             return CommandResult(True, action, {"query": arg},
-                                 raw, feedback=f"Looking that up...")
+                                 raw, feedback="Looking that up...")
 
         elif action == "remember":
             return CommandResult(True, action, {"text": arg},
@@ -895,9 +924,14 @@ class CommandProcessor:
         if exe.startswith("http"):
             webbrowser.open(exe)
             return
-        # Protocol handlers: ms-settings:, spotify:, outlookcal:, … —
-        # a URI scheme, not a drive letter ("C:\...")
-        if re.match(r"^[A-Za-z][\w+.-]+:", exe) and not re.match(r"^[A-Za-z]:[\\/]", exe):
+        # Protocol handlers: spotify:, ms-settings:, mailto:, … — a URI scheme,
+        # not a drive letter ("C:\..."). Block script / local-file schemes so a
+        # crafted string can't launch a dangerous handler; allow the rest (app
+        # protocols come from trusted registry / Start-Menu discovery).
+        scheme_m = re.match(r"^([A-Za-z][\w+.-]+):", exe)
+        if scheme_m and not re.match(r"^[A-Za-z]:[\\/]", exe):
+            if scheme_m.group(1).lower() in _UNSAFE_URI_SCHEMES:
+                raise ValueError(f"unsafe URI scheme rejected: {exe!r}")
             os.startfile(exe)
             return
         if exe.lower().endswith(".lnk") or os.path.isfile(exe):
@@ -964,8 +998,7 @@ class CommandProcessor:
         Try to focus an already-running app window.
         Returns True if we successfully focused it.
         """
-        from app_discovery import get_discovery, PROCESS_ALIASES
-        import difflib
+        from app_discovery import get_discovery
 
         disc = self._discovery or get_discovery()
         proc_name = disc.find_process(name)
@@ -1296,7 +1329,8 @@ class CommandProcessor:
 
     def _whatsapp_paste(self, text: str) -> None:
         """Clipboard paste — Unicode-safe and fast (typewrite drops chars)."""
-        import pyautogui, pyperclip
+        import pyautogui
+        import pyperclip
         pyperclip.copy(text)
         time.sleep(0.05)
         pyautogui.hotkey("ctrl", "v")
@@ -1772,7 +1806,8 @@ class CommandProcessor:
             pyautogui.hotkey("win", "printscreen")
             self._tts_speak("Screenshot saved.")
         except Exception as exc:
-            self._tts_speak(f"Screenshot failed.")
+            logger.warning("Screenshot failed: %s", exc)
+            self._tts_speak("Screenshot failed.")
 
     # ── Local audit trail ────────────────────────────────────────────
     def _audit(self, action: str, args: dict) -> None:
@@ -1790,8 +1825,8 @@ class CommandProcessor:
                 log.write_text("\n".join(tail) + "\n", encoding="utf-8")
             with open(log, "a", encoding="utf-8") as fh:
                 fh.write(line)
-        except Exception:
-            pass  # auditing must never break command execution
+        except Exception as exc:
+            logger.debug("audit write skipped: %s", exc)  # never break execution
 
     # ── Confirmation gate for destructive / disruptive actions ───────
     def _require_confirm(self, action, prompt: str,
@@ -1900,7 +1935,8 @@ class CommandProcessor:
 
     def _type_text(self, text: str) -> None:
         try:
-            import pyperclip, pyautogui
+            import pyperclip
+            import pyautogui
             pyperclip.copy(text)
             pyautogui.hotkey("ctrl", "v")
         except Exception as exc:
