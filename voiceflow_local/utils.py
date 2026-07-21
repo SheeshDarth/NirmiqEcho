@@ -23,13 +23,31 @@ def setup_logging(level: int = logging.INFO) -> None:
     fmt = "%(asctime)s  %(levelname)-8s  %(name)-22s  %(message)s"
     date_fmt = "%H:%M:%S"
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter(fmt, date_fmt))
+    formatter = logging.Formatter(fmt, date_fmt)
 
     root = logging.getLogger()
     root.setLevel(level)
     if not root.handlers:
-        root.addHandler(handler)
+        # Console — only when one exists (a frozen windowed build has no stdout).
+        if sys.stdout is not None:
+            sh = logging.StreamHandler(sys.stdout)
+            sh.setFormatter(formatter)
+            root.addHandler(sh)
+        # Rotating file log — the crash record for field diagnosis. Lives under
+        # paths.base_dir()/logs (%LOCALAPPDATA%\NirmiqEcho when frozen), so a
+        # windowed exe with no console still records why it died.
+        try:
+            import paths
+            from logging.handlers import RotatingFileHandler
+            logdir = paths.base_dir() / "logs"
+            logdir.mkdir(parents=True, exist_ok=True)
+            fh = RotatingFileHandler(logdir / "nirmiqecho.log",
+                                     maxBytes=1_000_000, backupCount=3,
+                                     encoding="utf-8")
+            fh.setFormatter(formatter)
+            root.addHandler(fh)
+        except Exception:
+            pass  # never let logging setup crash startup
 
     # Quieten overly verbose third-party libraries
     logging.getLogger("faster_whisper").setLevel(logging.WARNING)

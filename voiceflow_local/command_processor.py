@@ -500,15 +500,25 @@ class CommandProcessor:
     # Public API
     # ------------------------------------------------------------------
 
-    def process(self, text: str, _allow_fallback: bool = True) -> CommandResult:
+    def process(self, text: str, _allow_fallback: bool = True,
+                dictation: bool = False) -> CommandResult:
         """
         Classify text as command or dictation.
 
-        FIRST checks if conversation state machine can handle it
-        (e.g. we're mid-WhatsApp flow). If nothing matches and the optional
-        local-LLM fallback is available, the phrasing is rewritten into a
-        canonical command and re-matched (so novel wording still works).
+        In ``dictation`` mode (Wispr-Flow pure typing) the text is handed
+        straight back to be typed and is NEVER interpreted as a command — this
+        is the safety boundary that stops "open the document" from launching an
+        app mid-sentence. Otherwise: check the conversation state machine first
+        (e.g. mid-WhatsApp flow); if nothing matches and the optional local-LLM
+        fallback is available, the phrasing is rewritten into a canonical
+        command and re-matched (so novel wording still works).
         """
+        # Dictation mode: never a command. Kept as the FIRST statement so it
+        # returns before any conversation-state / pattern / LLM logic — and so
+        # the cross-platform invariant test can exercise it on a bare instance.
+        if dictation:
+            return CommandResult(is_command=False, raw_text=text)
+
         # Strip ALL trailing punctuation Whisper may add ("Open Chrome!", "...?")
         cleaned = text.strip().rstrip(".!?,;:")
 
@@ -1123,7 +1133,7 @@ class CommandProcessor:
             os.startfile(f"spotify:search:{quote_plus(query)}")
             time.sleep(2.5)                      # let results render
 
-            if os.getenv("SPOTIFY_AUTOPLAY", "1") != "0":
+            if os.getenv("SPOTIFY_AUTOPLAY", "0") == "1":   # opt-in: keystroke autoplay is flaky
                 self._focus_window("spotify", timeout=4.0)
                 tabs = int(os.getenv("SPOTIFY_PLAY_TABS", "4"))
                 for _ in range(max(0, tabs)):
@@ -1495,9 +1505,22 @@ class CommandProcessor:
             time.sleep(0.3)
             self._whatsapp_paste(message)
             time.sleep(0.3)
-            pyautogui.press("enter")
-            self._tts_speak(f"Message sent to {contact}" if contact else "Message sent.")
-            logger.info("WhatsApp: sent to %s: %r", contact, message[:40])
+            # Fragile-flow degrade: a GUI-puppeted send can land in the wrong
+            # chat if focus/navigation drifted, and a sent message can't be
+            # undone. By default we STAGE the message and let the user review +
+            # press Enter. Opt into hands-free send with WHATSAPP_AUTOSEND=1.
+            if os.getenv("WHATSAPP_AUTOSEND", "0") == "1":
+                pyautogui.press("enter")
+                self._tts_speak(
+                    f"Message sent to {contact}" if contact else "Message sent.")
+                logger.info("WhatsApp: sent to %s: %r", contact, message[:40])
+            else:
+                self._tts_speak(
+                    f"I've typed your message to {contact}. Review it and press "
+                    f"Enter to send." if contact else
+                    "I've typed your message. Review it and press Enter to send.")
+                logger.info("WhatsApp: staged (not auto-sent) to %s: %r",
+                            contact, message[:40])
 
         except Exception as exc:
             logger.error("WhatsApp type message error: %s", exc)
@@ -1688,7 +1711,8 @@ class CommandProcessor:
 
     # ── lightweight remember / recall (local JSON) ────────────────────
     def _memory_path(self):
-        return Path(__file__).resolve().parent / "assets" / "memory.json"
+        import paths
+        return paths.assets_dir() / "memory.json"
 
     def _load_facts(self) -> list:
         import json
@@ -1817,7 +1841,8 @@ class CommandProcessor:
             import datetime
             line = (f"{datetime.datetime.now().isoformat(timespec='seconds')}  "
                     f"{action}  {args}\n")
-            log = Path(__file__).resolve().parent / "assets" / "command_log.txt"
+            import paths
+            log = paths.assets_dir() / "command_log.txt"
             log.parent.mkdir(parents=True, exist_ok=True)
             # Trim if it grows past ~500 KB so it never balloons.
             if log.exists() and log.stat().st_size > 512_000:

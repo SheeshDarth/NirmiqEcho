@@ -234,6 +234,59 @@ def ask(question: str, max_sentences: int = 2) -> str | None:
     return out or None
 
 
+# Dictation polish (Wispr-Flow style) — turn rambly speech into clean writing.
+_POLISH_SYSTEM = (
+    "You clean up dictated speech into polished written text. Fix grammar, "
+    "spelling, punctuation, and capitalization, and remove filler words (um, "
+    "uh, like, you know). KEEP the user's exact meaning and wording — do NOT "
+    "add, remove, answer, translate, summarize, or comment. Output ONLY the "
+    "cleaned text and nothing else."
+)
+_POLISH_MIN_WORDS = 3       # 1-2 words: nothing worth a round-trip
+_POLISH_MAX_CHARS = 600     # bound latency; longer dictation stays rules-cleaned
+
+
+def polish(text: str) -> str | None:
+    """
+    Rewrite dictated speech as clean written text with the LOCAL model.
+
+    Returns None when Ollama is unavailable, the text is too short/long, or the
+    model errors/misbehaves — callers then keep the fast rules-cleaned text, so
+    dictation still works fully offline. No cloud.
+    """
+    text = (text or "").strip()
+    if len(text.split()) < _POLISH_MIN_WORDS or len(text) > _POLISH_MAX_CHARS:
+        return None
+    if not is_available():
+        return None
+
+    body = json.dumps({
+        "model": OLLAMA_MODEL,
+        "messages": [{"role": "system", "content": _POLISH_SYSTEM},
+                     {"role": "user", "content": text}],
+        "stream": False, "think": False, "keep_alive": _KEEP_ALIVE,
+        "options": {"temperature": 0.0, "num_predict": 256},
+    }).encode("utf-8")
+    try:
+        req = urllib.request.Request(
+            OLLAMA_URL + "/api/chat", data=body,
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        out = (data.get("message", {}) or {}).get("content", "") or ""
+    except Exception as exc:
+        logger.debug("llm_fallback.polish failed: %s", exc)
+        return None
+
+    out = re.sub(r"<think>.*?</think>", "", out, flags=re.DOTALL | re.IGNORECASE)
+    out = out.strip().strip('"').strip("`")
+    # If the model refused, went empty, or ballooned (added meta/explanation),
+    # discard it and let the caller keep the rules-cleaned text.
+    if not out or len(out) > 2 * len(text) + 40:
+        return None
+    return out
+
+
 def prewarm() -> None:
     """
     Load the model into memory in the background so the first real fallback is

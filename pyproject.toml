@@ -6,7 +6,7 @@
 
 [project]
 name = "nirmiqecho"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local-first, offline JARVIS-style voice assistant for Windows (system tray)."
 readme = "README.md"
 requires-python = ">=3.11"
