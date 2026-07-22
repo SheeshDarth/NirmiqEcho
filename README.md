@@ -1,9 +1,11 @@
 # NirmiqEcho
 
-A local-first **JARVIS-style voice assistant** for Windows. Speak, and it acts —
-opening apps, messaging on WhatsApp, playing music, finding files, doing math,
-controlling the system. Runs in your system tray. Your voice never leaves your
-machine.
+A local-first voice assistant for Windows that's **Jarvis and Wispr Flow in one**.
+Press **F9** and speak — in **Command mode** it *acts* (opens apps, messages on
+WhatsApp, plays music, finds files, does math, controls the system); flip to
+**Dictation mode** with **F10** and it *writes* — clean, AI-polished text typed
+into whatever app is focused. Runs in your system tray. Your voice never leaves
+your machine.
 
 ![CI](https://github.com/SheeshDarth/NirmiqEcho/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
@@ -21,6 +23,10 @@ machine.
 Most "build Jarvis in Python" projects are *either* brittle keyword-matching
 *or* a thin wrapper around a cloud LLM. NirmiqEcho is neither:
 
+- 🗣️ **Two modes, one key away** — **Command** (F9) acts on what you say;
+  **Dictation** (F10) types it instead, polished into clean prose Wispr-Flow
+  style. A hard safety boundary means Dictation mode can *never* be misread as
+  a command — "open the document" gets typed, not executed.
 - 🧠 **Hybrid intelligence, 100% offline** — instant offline pattern engine for
   known commands **+** a *local* Ollama LLM fallback that understands free-form
   phrasing, with graceful degradation when the LLM is off. No cloud, no API key.
@@ -39,13 +45,19 @@ start.bat
 ```
 
 A mic icon appears in your system tray. Press **F9** to start/stop listening
-(or enable "Hello Echo" wake word). Then just talk:
+(or enable "Hello Echo" wake word). A one-time welcome screen walks you through
+the two hotkeys. Then just talk:
 
+**Command mode** (default) — it acts:
 > "open chrome" · "play despacito" · "message Rahul saying running late"
 > "what's 47 times 19" · "set a timer for 10 minutes" · "find my resume"
 > "take a screenshot" · "volume up" · "what time is it"
 > "who is Einstein" · "what is photosynthesis" · "tell me a joke"
 > "remember that my locker code is 4821" · "what do you remember" · "cpu usage"
+
+**Dictation mode** — press **F10**, then talk into any focused window (an editor,
+chat, browser field) and it types clean, punctuated text instead of running a
+command. Press **F10** again to switch back. Toggle from the tray icon too.
 
 First run installs dependencies and loads the Whisper model from `models/`.
 
@@ -64,13 +76,19 @@ Two layers, so it's both **instant** and **flexible**:
    so follow-ups resolve — "what is the Eiffel Tower" → "how tall is it".
 
 To enable the fallback: install [Ollama](https://ollama.com), `ollama pull
-qwen3.5:4b`, and keep it running. Configure in `.env` (see `.env.example`).
+qwen3.5:4b`, and keep it running. Configure in `.env` (see `.env.example`). The
+same local model also **polishes dictation** (fixes grammar/punctuation, strips
+fillers) when it's running — with an instant regex-based fallback when it's not,
+so Dictation mode always stays fully offline-capable.
 
 ```mermaid
 flowchart LR
     M[🎤 Mic] --> V[VAD + noise reduction]
     V --> W[faster-whisper<br/>GPU large-v3 / CPU small.en]
-    W --> P{Command engine}
+    W --> D{Input mode}
+    D -->|Dictation - F10| K[Local Ollama polish<br/>or regex cleanup]
+    K --> TY[⌨️ Typed into focused app]
+    D -->|Command - F9| P{Command engine}
     P -->|exact match| R[Regex / math / units<br/>~instant]
     P -->|no match| C[commands.yaml<br/>your custom phrases]
     P -->|still no match| L[Local Ollama<br/>rewrite → known command]
@@ -112,16 +130,21 @@ still runs through the same validation as a built-in command.
 
 ```
 NirmiqEcho/
-├── start.bat              ← launch the assistant
+├── start.bat              ← launch the assistant (dev / from source)
+├── nirmiqecho.spec        ← PyInstaller build spec (packaged .exe)
+├── packaging/             ← build notes + native-dep hook overrides
+├── SMOKE_CHECKLIST.md     ← manual pre-release gate (voice/mic can't run in CI)
 ├── voiceflow_local/       ← the app
-│   ├── main.py            ← entry point / orchestrator
+│   ├── main.py            ← entry point / orchestrator, Command⟷Dictation modes
 │   ├── audio_handler.py   ← mic capture + VAD + noise reduction
 │   ├── transcription.py   ← faster-whisper (GPU/CPU auto)
 │   ├── command_processor.py ← 90+ offline commands
-│   ├── llm_fallback.py    ← optional local-Ollama "understand anything"
+│   ├── llm_fallback.py    ← local-Ollama "understand anything" + dictation polish
+│   ├── paths.py           ← writable data dir (source vs. frozen-exe aware)
 │   ├── calculator.py · units.py ← offline math / conversions
-│   ├── wake_word.py · tts_engine.py · ui.py (tray) · ...
-│   └── mic_check.py       ← mic diagnostic
+│   ├── wake_word.py · tts_engine.py · ui.py (tray + onboarding) · ...
+│   ├── mic_check.py       ← mic diagnostic
+│   └── tests/             ← pytest suite (offline logic + safety)
 ├── models/                ← faster-whisper cache (gitignored)
 ├── Test*.m4a              ← your voice samples (accent profiling)
 ├── .env.example           ← copy to .env to configure
