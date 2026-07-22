@@ -21,7 +21,7 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["docs/archive", ".venv", "models", "voiceflow_local/tests/manual"]
+extend-exclude = ["docs/archive", ".venv", ".buildenv", "models", "models_bundle", "voiceflow_local/tests/manual"]
 
 [tool.ruff.lint]
 # E + F only — real errors (syntax, unused / undefined names). Import-sort (I) is

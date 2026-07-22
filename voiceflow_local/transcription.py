@@ -23,6 +23,7 @@ Accuracy settings vs baseline:
 """
 
 import os
+import sys
 import threading
 import queue
 import logging
@@ -127,6 +128,11 @@ class TranscriptionEngine:
             self.model_size = model_size          # explicit override
         elif env_model:
             self.model_size = env_model           # .env override (any device)
+        elif getattr(sys, "frozen", False):
+            # Packaged build: default to the BUNDLED small.en so first launch is
+            # 100% offline (no ~3 GB large-v3 download). Opt into large-v3 with
+            # WHISPER_MODEL=large-v3 (downloads once).
+            self.model_size = "small.en"
         elif self.device == "cuda":
             self.model_size = "large-v3"          # GPU: best model, still fast
         else:
@@ -156,10 +162,15 @@ class TranscriptionEngine:
                     self.model_size, self.device)
         start = time.monotonic()
 
-        # Point to a predictable local cache directory (avoids re-downloads)
-        cache_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "..", "models"
-        )
+        # Predictable local cache dir (avoids re-downloads). Frozen: the models/
+        # folder bundled inside the app (sys._MEIPASS) where small.en is packaged,
+        # so first launch loads offline. Dev: repo-root models/ cache.
+        if getattr(sys, "frozen", False):
+            cache_dir = os.path.join(sys._MEIPASS, "models")
+        else:
+            cache_dir = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "..", "models"
+            )
         os.makedirs(cache_dir, exist_ok=True)
 
         # cpu_threads: use all physical cores for faster load + inference

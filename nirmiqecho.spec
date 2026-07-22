@@ -50,11 +50,11 @@ if os.path.exists(os.path.join(HERE, ".env.example")):
 if os.path.exists(os.path.join(HERE, "commands.example.yaml")):
     datas += [(os.path.join(HERE, "commands.example.yaml"), ".")]
 
-# Optional: bundle a CPU Whisper model for a truly-offline first launch.
-# Prepare ./models_bundle/ with small.en int8 (see build/README.md); kept out
-# of git. MS3 wires transcription.py to load it by path with local_files_only.
+# Bundle a CPU Whisper model for a truly-offline first launch. Populate
+# ./models_bundle/ as an HF cache (see packaging/README.md); kept out of git.
+# transcription.py (when frozen) loads it from sys._MEIPASS/models with no network.
 if os.path.isdir(os.path.join(HERE, "models_bundle")):
-    datas += [(os.path.join(HERE, "models_bundle"), "models_bundle")]
+    datas += [(os.path.join(HERE, "models_bundle"), "models")]
 
 a = Analysis(
     [os.path.join(SRC, "main.py")],

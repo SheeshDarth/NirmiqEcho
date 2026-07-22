@@ -24,8 +24,9 @@ pip install -r voiceflow_local\requirements.txt pyinstaller
 ## Optional: bundle a CPU model for a truly-offline first launch
 
 ```
-# small.en int8 (~0.5 GB) — grab it once, then the spec bundles models_bundle/:
-python -c "from faster_whisper import download_model; download_model('small.en', output_dir='models_bundle')"
+# small.en (~0.5 GB) as an HF cache — the spec bundles it to the app's models/
+# dir and transcription.py loads it offline when frozen:
+python -c "from faster_whisper import download_model; download_model('small.en', cache_dir='models_bundle')"
 ```
 
 ## Build

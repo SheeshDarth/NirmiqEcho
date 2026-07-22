@@ -14,6 +14,7 @@ commands.yaml
 
 # Whisper models (several GB — re-downloaded / reused automatically)
 models/
+models_bundle/
 
 # Python
 __pycache__/
@@ -25,6 +26,7 @@ dist/
 .pytest_cache/
 .venv/
 venv/
+.buildenv/
 
 # Local data
 *.db
