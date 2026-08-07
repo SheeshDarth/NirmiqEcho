@@ -539,6 +539,24 @@ class SettingsModal:
         self._sep(body)
 
         # ── Typing Mode ───────────────────────────────────────────────
+        self._lbl(body, "Input Mode  (F10 toggles this live)")
+        imode_row = tk.Frame(body, bg=C["modal_bg"])
+        imode_row.pack(fill="x", pady=2)
+        self._imode_var = tk.StringVar(
+            value=getattr(self._app, "_input_mode", "command"))
+        for val, lbl in [
+            ("command",   "Command  ·  Echo acts on what you say"),
+            ("dictation", "Dictation  ·  Echo types clean text"),
+        ]:
+            tk.Radiobutton(
+                imode_row, text=lbl, variable=self._imode_var, value=val,
+                font=F["small"], bg=C["modal_bg"], fg=C["text2"],
+                activebackground=C["modal_bg"], activeforeground=C["teal"],
+                selectcolor=C["panel"], relief="flat",
+            ).pack(anchor="w")
+        self._sep(body)
+
+        # ── Typing Mode (dictation text shaping) ──────────────────────
         self._lbl(body, "Typing Mode")
         mode_row = tk.Frame(body, bg=C["modal_bg"])
         mode_row.pack(fill="x", pady=2)
@@ -615,6 +633,8 @@ class SettingsModal:
             self._app._autorun = self._autorun_var.get()
             if hasattr(self._app, "set_mode"):
                 self._app.set_mode(self._mode_var.get())
+            if hasattr(self._app, "set_input_mode"):
+                self._app.set_input_mode(self._imode_var.get())
             self._win.destroy()
 
         for txt, cmd, fg in [("Save", _save, C["teal"]),
@@ -626,6 +646,103 @@ class SettingsModal:
                       ).pack(side="left", padx=(0, 8))
 
 
+
+
+# ─────────────────────────────────────────────────────────────────────
+# System tray helper
+# ─────────────────────────────────────────────────────────────────────
+
+class OnboardingModal:
+    """First-run welcome — the two hotkeys, the two modes, and the privacy pitch.
+
+    Shown once (guarded by a flag file in the assets dir), in the same dark
+    design language as Settings. One clear primary action, strong hierarchy, an
+    escape route (closing counts as done), and no wall of text.
+    """
+    FLAG_NAME = ".onboarded"
+
+    def __init__(self, parent, app):
+        self._app = app
+        self._win = tk.Toplevel(parent)
+        self._win.title("Welcome — NirmiqEcho")
+        self._win.configure(bg=C["modal_bg"])
+        self._win.resizable(False, False)
+        self._win.grab_set()
+        self._win.transient(parent)
+        self._win.protocol("WM_DELETE_WINDOW", self._finish)
+        self._dark_titlebar()
+        self._build()
+        self._win.update_idletasks()
+        px, py = parent.winfo_rootx(), parent.winfo_rooty()
+        pw, ph = parent.winfo_width(), parent.winfo_height()
+        mw, mh = self._win.winfo_width(), self._win.winfo_height()
+        self._win.geometry(f"+{px + (pw - mw)//2}+{py + (ph - mh)//2}")
+
+    def _dark_titlebar(self):
+        try:
+            import ctypes
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                self._win.winfo_id(), 20,
+                ctypes.byref(ctypes.c_int(1)), ctypes.sizeof(ctypes.c_int))
+        except Exception:
+            pass
+
+    def _heading(self, body, text):
+        tk.Label(body, text=text, font=F["title"], bg=C["modal_bg"],
+                 fg=C["text"]).pack(anchor="w", pady=(10, 2))
+
+    def _line(self, body, key, desc):
+        row = tk.Frame(body, bg=C["modal_bg"])
+        row.pack(fill="x", pady=1)
+        tk.Label(row, text=key, font=F["small"], bg=C["modal_bg"],
+                 fg=C["teal"], width=10, anchor="w").pack(side="left")
+        tk.Label(row, text=desc, font=F["small"], bg=C["modal_bg"],
+                 fg=C["text2"], anchor="w", justify="left").pack(side="left")
+
+    def _build(self):
+        body = tk.Frame(self._win, bg=C["modal_bg"])
+        body.pack(fill="both", expand=True, padx=22, pady=6)
+
+        tk.Label(body, text="👋  Welcome to NirmiqEcho", font=F["title"],
+                 bg=C["modal_bg"], fg=C["text"]).pack(anchor="w", pady=(10, 2))
+        tk.Label(body,
+                 text="A 100% offline voice assistant — your voice never leaves this PC.",
+                 font=F["small"], bg=C["modal_bg"], fg=C["text2"],
+                 wraplength=340, justify="left").pack(anchor="w", pady=(0, 4))
+        tk.Frame(body, bg=C["panel2"], height=1).pack(fill="x", pady=6)
+
+        self._heading(body, "Two keys to know")
+        self._line(body, "F9", "start / stop listening")
+        self._line(body, "F10", "switch Command ⟷ Dictation")
+        tk.Frame(body, bg=C["panel2"], height=1).pack(fill="x", pady=6)
+
+        self._heading(body, "Two modes")
+        self._line(body, "Command", "Echo acts: open apps, volume, math, timers.")
+        self._line(body, "Dictation", "Echo types clean text into any app.")
+        tk.Frame(body, bg=C["panel2"], height=1).pack(fill="x", pady=6)
+
+        tk.Label(body,
+                 text="Optional: install Ollama for ‘understand-anything’ phrasing and "
+                      "cleaner dictation. Skip it — Echo still works fully offline.",
+                 font=F["badge"], bg=C["modal_bg"], fg=C["text2"],
+                 wraplength=340, justify="left").pack(anchor="w", pady=(0, 6))
+
+        tk.Button(body, text="Get Started", command=self._finish,
+                  font=F["toolbar"], bg=C["teal"], fg=C["bg"],
+                  activebackground=C["green"], activeforeground=C["bg"],
+                  relief="flat", padx=18, pady=5, cursor="hand2"
+                  ).pack(anchor="e", pady=(4, 10))
+
+    def _finish(self):
+        try:
+            import paths
+            (paths.assets_dir() / self.FLAG_NAME).write_text("1", encoding="utf-8")
+        except Exception:
+            pass
+        try:
+            self._win.destroy()
+        except Exception:
+            pass
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -756,6 +873,9 @@ class NirmiqEchoUI:
                 else:
                     self.root.after(0, self.app.enable_echo_mode)
 
+            def _toggle_input_mode(icon, item):
+                self.root.after(0, self.app.toggle_input_mode)
+
             def _quit(icon, item):
                 # Stop tray first, then shut down on main thread
                 icon.stop()
@@ -773,6 +893,11 @@ class NirmiqEchoUI:
                     "Echo Mode (Hello Echo)",
                     _toggle_echo,
                     checked=lambda item: getattr(self.app, "_echo_mode", False),
+                ),
+                pystray.MenuItem(
+                    "Dictation mode (F10)",
+                    _toggle_input_mode,
+                    checked=lambda item: getattr(self.app, "_input_mode", "command") == "dictation",
                 ),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Quit", _quit),
@@ -1319,5 +1444,16 @@ class NirmiqEchoUI:
         n    = len(text.split()) if text else 0
         self._wc_lbl.config(text=f"{n} word{'s' if n != 1 else ''}")
 
+    def _maybe_onboard(self):
+        """First launch only: show the welcome modal (guarded by a flag file)."""
+        try:
+            import paths
+            if (paths.assets_dir() / OnboardingModal.FLAG_NAME).exists():
+                return
+            OnboardingModal(self.root, self.app)
+        except Exception as exc:
+            logger.debug("onboarding skipped: %s", exc)
+
     def run(self):
+        self.root.after(700, self._maybe_onboard)
         self.root.mainloop()

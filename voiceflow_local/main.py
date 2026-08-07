@@ -45,6 +45,7 @@ from ui import NirmiqEchoUI
 logger = logging.getLogger(__name__)
 
 TOGGLE_KEY = "f9"
+MODE_KEY = "f10"   # toggle Command <-> Dictation input mode
 
 # Voice samples for accent analysis — the project root (where Test*.m4a live),
 # resolved relative to this file so it survives folder renames/moves.
@@ -94,6 +95,13 @@ class NirmiqEchoApp:
         # Plug-and-play: start listening the moment the model is ready, so the
         # user never has to press F9 first. Override with AUTORUN=0 in .env.
         self._autorun = os.getenv("AUTORUN", "1") != "0"
+
+        # Input mode: "command" routes speech through the Jarvis command engine
+        # (unmatched speech is still typed); "dictation" is Wispr-Flow pure
+        # typing — speech is never interpreted as a command. Toggle with F10.
+        self._input_mode = os.getenv("INPUT_MODE", "command").strip().lower()
+        if self._input_mode not in ("command", "dictation"):
+            self._input_mode = "command"
 
     # ------------------------------------------------------------------
     # Startup
@@ -163,8 +171,9 @@ class NirmiqEchoApp:
         # --- UI ---
         self.ui = NirmiqEchoUI(app=self)
 
-        # --- Global hotkey ---
+        # --- Global hotkeys ---
         self._hotkeys.register(TOGGLE_KEY, self._toggle)
+        self._hotkeys.register(MODE_KEY, self.toggle_input_mode)
 
         # --- Background: load main model + tiny model + accent analysis ---
         threading.Thread(
@@ -383,6 +392,23 @@ class NirmiqEchoApp:
             self.post_processor.set_mode(mode)
             logger.info("Mode set to: %s", mode)
 
+    def toggle_input_mode(self) -> None:
+        """Flip Command <-> Dictation input mode (F10 / tray). Any thread."""
+        self.set_input_mode(
+            "dictation" if self._input_mode == "command" else "command")
+
+    def set_input_mode(self, mode: str) -> None:
+        """Set input mode: 'command' = Jarvis engine, 'dictation' = pure typing."""
+        mode = mode.strip().lower()
+        if mode not in ("command", "dictation"):
+            return
+        self._input_mode = mode
+        logger.info("Input mode: %s", mode)
+        if self.ui:
+            self.ui.schedule("set_status_text", f"{mode.capitalize()} mode")
+        if self.tts_engine and self.tts_engine.is_available:
+            self.tts_engine.speak(f"{mode} mode")
+
     # ------------------------------------------------------------------
     # Callbacks from background threads
     # ------------------------------------------------------------------
@@ -418,9 +444,10 @@ class NirmiqEchoApp:
 
         logger.info("Result: %s", cleaned)
 
-        # Route through Jarvis command engine
+        # Route through Jarvis command engine (skipped entirely in dictation mode)
         if self.command_processor:
-            cmd_result = self.command_processor.process(cleaned)
+            dictation = self._input_mode == "dictation"
+            cmd_result = self.command_processor.process(cleaned, dictation=dictation)
             if cmd_result.is_command:
                 # Execute command silently — don't type it
                 self.command_processor.execute(cmd_result)
@@ -433,13 +460,25 @@ class NirmiqEchoApp:
             if cmd_result.action == "force_type":
                 cleaned = cmd_result.args.get("text", cleaned)
 
-        # Not a command — type into focused app and add to transcript
+        # Not a command — in Dictation mode, polish the text into clean written
+        # prose with the local LLM (Wispr-Flow style); falls back instantly to
+        # the rules-cleaned text when Ollama is off. Then type into focused app.
+        typed = cleaned
+        if self._input_mode == "dictation":
+            try:
+                import llm_fallback
+                polished = llm_fallback.polish(cleaned)
+                if polished:
+                    typed = polished
+            except Exception as exc:
+                logger.debug("dictation polish skipped: %s", exc)
+
         if self.text_typer and self.text_typer.is_available:
-            self.text_typer.type_text(cleaned)
+            self.text_typer.type_text(typed)
             if self.command_processor:
-                self.command_processor.record_typed(cleaned)
+                self.command_processor.record_typed(typed)
         if self.ui:
-            self.ui.schedule("append_transcript", cleaned)
+            self.ui.schedule("append_transcript", typed)
 
     def _on_command_feedback(self, msg: str) -> None:
         """Flash brief command feedback in the status bar, then restore status.

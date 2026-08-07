@@ -3,6 +3,26 @@
 All notable changes to NirmiqEcho are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com); this project uses semantic versioning.
 
+## [Unreleased] - v0.2.0 in progress
+
+Turns NirmiqEcho into a **Jarvis × Wispr Flow** assistant and makes it
+packageable as a standalone offline Windows app.
+
+### Added
+- **Command / Dictation input modes** — F9 listens, F10 switches between
+  acting on speech (Command) and typing it verbatim (Dictation). Dictation
+  mode has a hard safety boundary: it never interprets speech as a command.
+- **Wispr-Flow-style dictation polish** — the local Ollama model rewrites
+  dictated speech into clean, punctuated prose; falls back instantly to the
+  regex cleaner when Ollama is off, so dictation stays fully offline-capable.
+- First-run onboarding screen, tray mode toggle, and a Settings input-mode picker.
+- Frozen-build (.exe) support: `nirmiqecho.spec`, a writable per-user data dir
+  (`%LOCALAPPDATA%\NirmiqEcho`), a bundled offline Whisper model for first
+  launch, and a rotating crash log for field diagnosis.
+
+### Fixed
+- Version string drift between the launcher banner and packaging metadata.
+
 ## [0.1.0] - 2026-07-08
 
 First public release — a **100% offline, JARVIS-style voice command assistant for Windows**

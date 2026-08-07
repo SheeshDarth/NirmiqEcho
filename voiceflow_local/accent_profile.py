@@ -18,9 +18,11 @@ import logging
 import time
 from pathlib import Path
 
+import paths
+
 logger = logging.getLogger(__name__)
 
-PROFILE_PATH = Path(__file__).parent / "assets" / "accent_profile.json"
+PROFILE_PATH = paths.assets_dir() / "accent_profile.json"
 
 # Default profile used before analysis or if analysis fails
 DEFAULT_PROFILE = {
