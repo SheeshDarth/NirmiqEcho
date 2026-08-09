@@ -16,6 +16,7 @@ coexist cleanly. When main listening is active, the wake detector pauses
 itself to avoid double-recording.
 """
 
+import sys
 import threading
 import queue
 import logging
@@ -101,9 +102,15 @@ class WakeWordDetector:
         logger.info("WakeWordDetector: loading Whisper tiny.en model…")
         start = time.monotonic()
 
-        cache_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "..", "models"
-        )
+        # Same frozen-vs-dev cache resolution as transcription.py: a frozen
+        # build reads the model bundled at sys._MEIPASS/models (offline, no
+        # download); dev mode uses the repo-root models/ cache.
+        if getattr(sys, "frozen", False):
+            cache_dir = os.path.join(sys._MEIPASS, "models")
+        else:
+            cache_dir = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "..", "models"
+            )
         os.makedirs(cache_dir, exist_ok=True)
 
         with self._model_lock:

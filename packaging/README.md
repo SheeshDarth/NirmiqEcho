@@ -21,13 +21,19 @@ py -3.12 -m venv .buildenv
 pip install -r voiceflow_local\requirements.txt pyinstaller
 ```
 
-## Optional: bundle a CPU model for a truly-offline first launch
+## Bundle models for a truly-offline first launch
+
+Two models need bundling — the main transcription engine AND the wake-word
+detector (a separate, smaller model) — or the frozen app phones home for
+whichever one is missing on first launch:
 
 ```
-# small.en (~0.5 GB) as an HF cache — the spec bundles it to the app's models/
-# dir and transcription.py loads it offline when frozen:
 python -c "from faster_whisper import download_model; download_model('small.en', cache_dir='models_bundle')"
+python -c "from faster_whisper import download_model; download_model('tiny.en', cache_dir='models_bundle')"
 ```
+
+The spec bundles both to the app's `models/` dir; `transcription.py` and
+`wake_word.py` both load from `sys._MEIPASS/models` offline when frozen.
 
 ## Build
 
